@@ -21,7 +21,7 @@ import copy
 TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT
 TESTREPO='mnokka-unikie/GithubActionForPR'
 TESTPR='https://api.github.com/repos/mnokka-unikie/GithubActionForPR/pulls/1' # used in test known repo to have open pull requests
-
+ORGANIZATION="tiiuae" # required organization membership before building PR
 
 file_exists = os.path.exists(TOKENFILE)
 if (file_exists):
@@ -113,7 +113,25 @@ except KeyError:
 try:
     print("TARGET BRANCH (like main/master):"+data["base"]["ref"])
     TARGET=data["base"]["ref"]
+    if (TARGET=="main"):
+        print("OK source repo")
+    else:
+        print ("FAIL. source repo is not main")
+        sys.exit(5)
 except KeyError:
     print("no base ref found")  
+
+USER=data["user"]["login"]
+org = g.get_organization(ORGANIZATION)
+user = g.get_user(USER)
+
+if org.has_in_members(user):
+    print(f"The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
+    print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
+else:
+    print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
+    print ("No build activities done")
+
+
+
     
-print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
