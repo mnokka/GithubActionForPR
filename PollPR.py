@@ -73,7 +73,8 @@ def Finder():
     print("------ Checking which open PRs are new and require building ------")
     copy_done_prs=copy.copy(done_prs) # shallow copies are iterared over as defaultdict changes dict size when default value must be returned
     copy_open_prs=copy.copy(open_prs)
-    tbd=0
+    #tbd=0
+    tbd_list=[]
     counter=1
     
     for doneline in copy_done_prs:
@@ -85,8 +86,8 @@ def Finder():
                 print ("*********************************************************")
             elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
                 print  ("NEW PR, going to build this:"+str(counter))
-                print ("TBD: Collect PR to array")
-                tbd=counter
+                #tbd=counter
+                tbd_list.append(counter)
                 #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
                 print ("*********************************************************")
             elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
@@ -118,7 +119,7 @@ def Finder():
         print("TARGET BRANCH (like main/master):"+data["base"]["ref"])
         TARGET=data["base"]["ref"]
         if (TARGET=="main"):
-            print("OK terget(main) repo")
+            print("OK target(main) repo")
         else:
             print ("FAIL. source repo is not main")
             sys.exit(5)
@@ -129,33 +130,28 @@ def Finder():
     org = g.get_organization(ORGANIZATION)
     user = g.get_user(USER)
     
-    # TODO: collect all new PRs to list? to process in a loop
-    
     if org.has_in_members(user):
         print(f"The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
-        #print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
-        #print ("--> Source branch:" +SOURCE)
-        #print ("--> PR number:"+str(tbd))
-        PRActions(SOURCE,tbd,TARGET,myfile)
+        for x in tbd_list:
+            print ("Handling PR:"+str(x))
+            PRActions(SOURCE,x,TARGET,myfile)
     else:
         print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
         print ("No build activities done")
 
 ########################################################
 def PRActions(SOURCE,tbd,TARGET,myfile):
-    print("TBD: HANDLE ALL NEW PRS")
     print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
-    print ("Target maina branch:"+TARGET)
+    print ("Target main branch:"+TARGET)
     print ("--> Source branch:" +SOURCE)
     print ("--> PR number:"+str(tbd))
     print ("--> HYDRACTL command: "+HYDRACTL) 
     print ("--> Hydra port:"+str(EXT_PORT))
     print ("--> Hydra server:"+SERVER)
-    print ("----------------------------------------------")
     print ("Fake OK command execution detected, going to record fake PR as done deed")
-    FAKEDONE=3+tbd
+    print ("----------------------------------------------")
+    FAKEDONE=33+tbd
     FAKEDONE=str(FAKEDONE)+"\r\n"
-    #rint ("FAKEDONE:"+FAKEDONE)
     myfile.write(FAKEDONE)
     
     
