@@ -35,6 +35,8 @@ def main(argv):
 
 #############################################################################
 def Finder():
+    CREATED=""
+    CHANGED=""
     file_exists = os.path.exists(TOKENFILE)
     if (file_exists):
             file = open(TOKENFILE, "r")
@@ -77,6 +79,16 @@ def Finder():
     tbd_list=[]
     counter=1
     
+        # Get repos open pull requests
+    url=TESTPR
+    with urlopen(url) as response:
+        body = response.read()
+    
+    data = json.loads(body)
+    #print(data)
+    print ("----------------------------------------")  
+    
+    
     for doneline in copy_done_prs:
         for openline in copy_open_prs:
     
@@ -89,6 +101,19 @@ def Finder():
                 #tbd=counter
                 tbd_list.append(counter)
                 #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
+                pr=repo.get_pull(counter)
+                CREATED=pr.created_at
+                
+                commits=pr.get_commits()
+               
+                # Sort the commits by the commit timestamp in descending order
+                sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
+                print ("commits:"+str(sorted_commits))
+                # Get the timestamp of the most recent commit
+                CHANGED= sorted_commits[0].commit.committer.date
+                #CHANGED=pr.changed_at
+                print ("CREATED:"+str(CREATED))
+                print ("CHANGED:"+str(CHANGED))
                 print ("*********************************************************")
             elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                 print  ("OLD done PR:"+str(counter))
@@ -96,14 +121,7 @@ def Finder():
                 print ("*********************************************************")
             counter=counter+1
     
-    # Get repos open pull requests
-    url=TESTPR
-    with urlopen(url) as response:
-        body = response.read()
-    
-    data = json.loads(body)
-    #print(data)
-    print ("----------------------------------------")  
+
     
     
     SOURCE="NONE"
@@ -134,23 +152,36 @@ def Finder():
         print(f"The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
         for x in tbd_list:
             print ("Handling PR:"+str(x))
-            PRActions(SOURCE,x,TARGET,myfile)
+            PRActions(SOURCE,x,TARGET,myfile,USER)
     else:
         print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
         print ("No build activities done")
 
 ########################################################
-def PRActions(SOURCE,tbd,TARGET,myfile):
+def PRActions(SOURCE,PR,TARGET,myfile,USER):
     print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
     print ("Target main branch:"+TARGET)
     print ("--> Source branch:" +SOURCE)
-    print ("--> PR number:"+str(tbd))
+    print ("--> PR number:"+str(PR))
     print ("--> HYDRACTL command: "+HYDRACTL) 
     print ("--> Hydra port:"+str(EXT_PORT))
     print ("--> Hydra server:"+SERVER)
+    print ("User:"+USER)
     print ("Fake OK command execution detected, going to record fake PR as done deed")
     print ("----------------------------------------------")
-    FAKEDONE=33+tbd
+    DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" From branch:"+SOURCE+"\""
+    PROJECT=str(PR)+"-"+USER+"-"+SOURCE
+    FLAKE="git+https://github.com/tiiuae/ghaf/?ref="+SOURCE
+    JOBSET=str(PR)+"-"+SOURCE
+    print ("PROJECT:"+PROJECT)    
+    print ("DESCRIPTION:"+DESCRIPTION)
+    print ("FLAKE:"+FLAKE)
+    print("JOBSET:"+JOBSET)
+    APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION 
+    AJCOMMAND="python 3 "+HYDRACTL+" "+SERVER+" AJ --project "+PROJECT+" --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET
+    print ("APCOMMAND:"+APCOMMAND)
+    print ("AJCOMMAND:"+AJCOMMAND)
+    FAKEDONE=33+PR
     FAKEDONE=str(FAKEDONE)+"\r\n"
     myfile.write(FAKEDONE)
     
