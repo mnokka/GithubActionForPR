@@ -19,10 +19,17 @@ import copy
 
 
 TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT
-TESTREPO='mnokka-unikie/GithubActionForPR'
-TESTPR='https://api.github.com/repos/mnokka-unikie/GithubActionForPR/pulls/1' # used in test known repo to have open pull requests
+#TESTREPO='mnokka-unikie/GithubActionForPR'
+#TESTPR='https://api.github.com/repos/mnokka-unikie/GithubActionForPR/pulls/1' # used in test known repo to have open pull requests
+#ORGANIZATION="tiiuae" # required organization membership before building PR
+#BUILDPRSFILE="pr_data"
+
+TESTREPO='mnokka-unikie/ghaf'
+TESTPR='https://api.github.com/repos/mnokka-unikie/Ghaf/pulls' # used in test known repo to have open pull requests
 ORGANIZATION="tiiuae" # required organization membership before building PR
-BUILDPRSFILE="pr_data"
+BUILDPRSFILE="pr2_data"
+
+
 
 # Hydra POC settings, change accordingly via conf file (TBD)
 HYDRACTL="../hydractl/hydractl.py" 
@@ -54,17 +61,37 @@ def Finder():
     repo = g.get_repo(TESTREPO)
     pulls = repo.get_pulls(state='open', sort='created', base='main')
     
+
+    
     # all open prs into a dictionary
+    i=0
     open_prs=defaultdict(lambda:"OFF")
     print ("------ All open PullRequest for repo: "+TESTREPO+" -------")
     for pull in pulls:
         print (pull)
         #print (pull.number)
         open_prs.update({pull.number: "ON"}) 
+        i=i+1
+        
+    if (i==0):
+        print ("No open PRs found, exiting")    
+        #print ("i:"+str(i))
+        sys.exit(4)
+
     
     #read done PRs in from disk
     done_prs=defaultdict(lambda:"NONE")
     myfile = open(BUILDPRSFILE, "a+")  
+    
+    # add fictional done PR number to an empty file in order to keep logic running....
+    if (os.stat(BUILDPRSFILE).st_size == 0):
+        print ("No done PRs found, adding fictional PR number to an empty file")
+        FICTIONALPR=123456789 # there cant be so many PRs just like 640Kb is enough for running Dos programs
+        FICTIONALPR=str(FICTIONALPR)+"\r\n"
+        myfile.seek(0) 
+        myfile.write(FICTIONALPR)
+        
+    
     myfile.seek(0) # a+ adds fd to end of file, for appends, we need to read from start
     print ("------Built PR numbers from the DB file: "+BUILDPRSFILE+" ------")
     for one_pr_number in myfile:
@@ -79,8 +106,9 @@ def Finder():
     tbd_list=[]
     counter=1
     
+ 
         # Get repos open pull requests
-    url=TESTPR
+    url=TESTPR+"/2"
     with urlopen(url) as response:
         body = response.read()
     
@@ -88,7 +116,7 @@ def Finder():
     #print(data)
     print ("----------------------------------------")  
     
-    
+
     for doneline in copy_done_prs:
         for openline in copy_open_prs:
     
@@ -126,6 +154,7 @@ def Finder():
     
     SOURCE="NONE"
     TARGET="NONE"  
+    SOURCE_REPO="NONE"
     try:
         print("SOURCE PR BRANCH:"+data["head"]["ref"])
         SOURCE=data["head"]["ref"]
@@ -144,24 +173,34 @@ def Finder():
     except KeyError:
         print("no base ref found")  
     
+    
+    try:
+        print("SOURCE REPO:"+data["head"]["repo"]["html_url"])
+        SOURCE_REPO=data["head"]["repo"]["html_url"]
+    except KeyError:
+        print("no source repo info found")  
+    
+    
+    
     USER=data["user"]["login"]
     org = g.get_organization(ORGANIZATION)
     user = g.get_user(USER)
     
-    if org.has_in_members(user):
+    if (org.has_in_members(user) or USER=="mnokka"):
         print(f"The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
         for x in tbd_list:
             print ("Handling PR:"+str(x))
-            PRActions(SOURCE,x,TARGET,myfile,USER)
+            PRActions(SOURCE,x,TARGET,myfile,USER,SOURCE_REPO)
     else:
         print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
         print ("No build activities done")
 
 ########################################################
-def PRActions(SOURCE,PR,TARGET,myfile,USER):
+def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
     print ("Target main branch:"+TARGET)
     print ("--> Source branch:" +SOURCE)
+    print ("--> Source repo:"+SOURCE_REPO)
     print ("--> PR number:"+str(PR))
     print ("--> HYDRACTL command: "+HYDRACTL) 
     print ("--> Hydra port:"+str(EXT_PORT))
