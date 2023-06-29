@@ -106,10 +106,6 @@ def Finder():
     print("------ Checking which open PRs are new and require building ------")
     copy_done_prs=copy.copy(done_prs) # shallow copies are iterared over as defaultdict changes dict size when default value must be returned
     copy_open_prs=copy.copy(open_prs)
-    #tbd=0
-    
-    #newPRs=len(open_prs)
-    #print ("size:"+str(newPRs))
     tbd_list=[]
     counter=1
     ###############################################################################
@@ -128,25 +124,22 @@ def Finder():
         with urlopen(url) as response:
             body = response.read()        
         data = json.loads(body)
-        #print(data)
-        print ("--------------------------------------------------------------------------------------------------")  
+
         
-
         for doneline in copy_done_prs:
-           # for openline in copy_open_prs:
-
+            
                 #check duplicate PRs in db file
                 if (counter in processed_pr):
                     print (processed_pr)
                     print ("---> Duplicate PR found in db file: "+str(counter) +" skipping!")
                     counter=counter+1
+                    print ("--------------------------------------------------------------------------------------------------")  
                     break
         
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="DONE"):
                     print ("==> OLD PR in PR list, has been built:"+str(counter))
-                    #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
-                    #print ("*********************************************************")
                     processed_pr.append(counter)
+                    print ("--------------------------------------------------------------------------------------------------")  
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
                     print  ("==> NEW PR, going to build this:"+str(counter))
                     #tbd=counter
@@ -155,10 +148,8 @@ def Finder():
                         tbd_list.append(counter)
                     else:
                         print("not adding")
-                    #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
-                    
-                    
-                    
+                    print ("--------------------------------------------------------------------------------------------------")  
+
                     ##############################################################################
                     # parse PR info (from Github JSON)
                     SOURCE="NONE"
@@ -198,7 +189,6 @@ def Finder():
                     
                     if (org.has_in_members(user) or USER=="mnokka"): # TBD remove test user backdoor
                         print(f"---> The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
-                        #for x in tbd_list:
                         if (counter in tbd_list):
                             print ("------> Handling PR number:"+str(counter))
                             if (ErroCounter==0):
@@ -208,8 +198,7 @@ def Finder():
                     else:
                         print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
                         print ("No build activities done")
-                    
-                    
+                    print ("--------------------------------------------------------------------------------------------------")  
                     
 
                     ######################################################################################
@@ -231,9 +220,7 @@ def Finder():
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
-                    #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
-                    #print ("*********************************************************")
-
+                    
                 
                 counter=counter+1
 
@@ -268,9 +255,9 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("APCOMMAND:"+APCOMMAND)
     print ("")
     print ("AJCOMMAND:"+AJCOMMAND)
-    FAKEDONE=33+PR # write PR number to db file, this is testing addition
-    FAKEDONE=str(FAKEDONE)+"\r\n"
-    myfile.write(FAKEDONE)
+    DONE=PR # write PR number to db file
+    DONE=str(DONE)+"\r\n"
+    myfile.write(DONE)
     print ("*******************************************************************************************************")
     
 ########################################################    
