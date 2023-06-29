@@ -241,16 +241,17 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("--> User:"+USER)
     print ("Fake OK command execution detected, going to record fake PR as done deed")
     print ("")
-    DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" From branch:"+SOURCE+"\""
-    PROJECT=str(PR)+"-"+USER+"-"+SOURCE
-    FLAKE="git+https://github.com/tiiuae/ghaf/?ref="+SOURCE
-    JOBSET=str(PR)+"-"+SOURCE
+    DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
+    PROJECT=USER+"X"+SOURCE
+    #FLAKE="git+https://github.com/tiiuae/ghaf/?ref="+SOURCE
+    FLAKE="git+"+SOURCE_REPO+"/?ref="+SOURCE
+    JOBSET=SOURCE+"X"+str(PR)
     print ("--> PROJECT:"+PROJECT)    
     print ("--> DESCRIPTION:"+DESCRIPTION)
     print ("--> FLAKE:"+FLAKE)
     print("--> JOBSET:"+JOBSET)
     APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION 
-    AJCOMMAND="python 3 "+HYDRACTL+" "+SERVER+" AJ --project "+PROJECT+" --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET
+    AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --project "+PROJECT+" --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET
     print ("")
     print ("APCOMMAND:"+APCOMMAND)
     print ("")
