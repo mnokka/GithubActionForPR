@@ -44,6 +44,9 @@ def main(argv):
 def Finder():
     CREATED=""
     CHANGED=""
+    
+    #########################################################################
+    #Authorization to Github
     file_exists = os.path.exists(TOKENFILE)
     if (file_exists):
             file = open(TOKENFILE, "r")
@@ -63,7 +66,8 @@ def Finder():
     
 
     
-    # all open prs into a dictionary
+    ##########################################################################
+    # Get all open prs into a dictionary
     i=0
     open_prs=defaultdict(lambda:"OFF")
     print ("------ All open PullRequest for repo: "+TESTREPO+" -------")
@@ -78,8 +82,8 @@ def Finder():
         #print ("i:"+str(i))
         sys.exit(4)
 
-    
-    #read done PRs in from disk
+    ###########################################################################
+    #read done PRs in from disk, initialize possible empty file 
     done_prs=defaultdict(lambda:"NONE")
     myfile = open(BUILDPRSFILE, "a+")  
     
@@ -103,127 +107,171 @@ def Finder():
     copy_done_prs=copy.copy(done_prs) # shallow copies are iterared over as defaultdict changes dict size when default value must be returned
     copy_open_prs=copy.copy(open_prs)
     #tbd=0
+    
+    #newPRs=len(open_prs)
+    #print ("size:"+str(newPRs))
     tbd_list=[]
     counter=1
-    
- 
-        # Get repos open pull requests
-    url=TESTPR+"/2"
-    with urlopen(url) as response:
-        body = response.read()
-    
-    data = json.loads(body)
-    #print(data)
-    print ("----------------------------------------")  
-    
-
-    for doneline in copy_done_prs:
-        for openline in copy_open_prs:
-    
-            if (open_prs[counter]=="ON" and done_prs[counter]=="DONE"):
-                print ("OLD PR in PR list, has been built:"+str(openline))
-                #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
-                print ("*********************************************************")
-            elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
-                print  ("NEW PR, going to build this:"+str(counter))
-                #tbd=counter
-                tbd_list.append(counter)
-                #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
-                pr=repo.get_pull(counter)
-                CREATED=pr.created_at
-                
-                commits=pr.get_commits()
-               
-                # Sort the commits by the commit timestamp in descending order
-                sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
-                print ("commits:"+str(sorted_commits))
-                # Get the timestamp of the most recent commit
-                CHANGED= sorted_commits[0].commit.committer.date
-                #CHANGED=pr.changed_at
-                print ("CREATED:"+str(CREATED))
-                print ("CHANGED:"+str(CHANGED))
-                print ("*********************************************************")
-            elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
-                print  ("OLD done PR:"+str(counter))
-                #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
-                print ("*********************************************************")
-            counter=counter+1
-    
-
-    
-    
+    ###############################################################################
+    # Process all repo's open pull requests
+    tbd_list=[]
+    processed_pr=[]
+    counter=1
     SOURCE="NONE"
     TARGET="NONE"  
     SOURCE_REPO="NONE"
-    try:
-        print("SOURCE PR BRANCH:"+data["head"]["ref"])
-        SOURCE=data["head"]["ref"]
-    except KeyError:
-        print("no head ref found")  
-      
-      
-    try:
-        print("TARGET BRANCH (like main/master):"+data["base"]["ref"])
-        TARGET=data["base"]["ref"]
-        if (TARGET=="main"):
-            print("OK target(main) repo")
-        else:
-            print ("FAIL. source repo is not main")
-            sys.exit(5)
-    except KeyError:
-        print("no base ref found")  
-    
-    
-    try:
-        print("SOURCE REPO:"+data["head"]["repo"]["html_url"])
-        SOURCE_REPO=data["head"]["repo"]["html_url"]
-    except KeyError:
-        print("no source repo info found")  
-    
-    
-    
-    USER=data["user"]["login"]
-    org = g.get_organization(ORGANIZATION)
-    user = g.get_user(USER)
-    
-    if (org.has_in_members(user) or USER=="mnokka"):
-        print(f"The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
-        for x in tbd_list:
-            print ("Handling PR:"+str(x))
-            PRActions(SOURCE,x,TARGET,myfile,USER,SOURCE_REPO)
-    else:
-        print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
-        print ("No build activities done")
+    ErroCounter=0
+
+    for newPr in copy_open_prs:
+        
+        url=TESTPR+"/"+str(newPr)
+        with urlopen(url) as response:
+            body = response.read()        
+        data = json.loads(body)
+        #print(data)
+        print ("--------------------------------------------------------------------------------------------------")  
+        
+
+        for doneline in copy_done_prs:
+           # for openline in copy_open_prs:
+
+                #check duplicate PRs in db file
+                if (counter in processed_pr):
+                    print (processed_pr)
+                    print ("---> Duplicate PR found in db file: "+str(counter) +" skipping!")
+                    counter=counter+1
+                    break
+        
+                elif (open_prs[counter]=="ON" and done_prs[counter]=="DONE"):
+                    print ("==> OLD PR in PR list, has been built:"+str(counter))
+                    #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
+                    #print ("*********************************************************")
+                    processed_pr.append(counter)
+                elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
+                    print  ("==> NEW PR, going to build this:"+str(counter))
+                    #tbd=counter
+                    processed_pr.append(counter)
+                    if (counter not in tbd_list):
+                        tbd_list.append(counter)
+                    else:
+                        print("not adding")
+                    #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
+                    
+                    
+                    
+                    ##############################################################################
+                    # parse PR info (from Github JSON)
+                    SOURCE="NONE"
+                    TARGET="NONE"  
+                    SOURCE_REPO="NONE"
+                    ErroCounter=0
+                    print ("")
+                    try:
+                        print("==> SOURCE PR BRANCH:"+data["head"]["ref"])
+                        SOURCE=data["head"]["ref"]
+                    except KeyError:
+                        print("ERROR: no head ref found")
+                        ErroCounter=ErroCounter+1  
+                        
+                    try:
+                        print("==> TARGET BRANCH (like main/master):"+data["base"]["ref"])
+                        TARGET=data["base"]["ref"]
+                        if (TARGET=="main"):
+                            print("==> OK target(main) repo")
+                        else:
+                            print ("ERROR: source repo is not main")
+                            ErroCounter=ErroCounter+1
+                            #sys.exit(5)
+                    except KeyError:
+                        print("no base ref found")  
+                    
+                    try:
+                        print("==> SOURCE REPO:"+data["head"]["repo"]["html_url"])
+                        SOURCE_REPO=data["head"]["repo"]["html_url"]
+                    except KeyError:
+                        print("ERROR:no source repo info found")
+                        ErroCounter=ErroCounter+1
+                    
+                    USER=data["user"]["login"]
+                    org = g.get_organization(ORGANIZATION)
+                    user = g.get_user(USER)
+                    
+                    if (org.has_in_members(user) or USER=="mnokka"): # TBD remove test user backdoor
+                        print(f"---> The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
+                        #for x in tbd_list:
+                        if (counter in tbd_list):
+                            print ("------> Handling PR number:"+str(counter))
+                            if (ErroCounter==0):
+                                PRActions(SOURCE,counter,TARGET,myfile,USER,SOURCE_REPO)
+                            else:
+                                print("Errors in PR data from Github, not doing build activities")    
+                    else:
+                        print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
+                        print ("No build activities done")
+                    
+                    
+                    
+
+                    ######################################################################################
+                    # Checking if done PR has been updated is under construction 
+                    #pr=repo.get_pull(counter)
+                    #CREATED=pr.created_at
+                    #commits=pr.get_commits()
+                    # Checking if done PR has been update is under construction
+                    # Sort the commits by the commit timestamp in descending order
+                    #sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
+                    #print ("commits:"+str(sorted_commits))
+                    # Get the timestamp of the most recent commit
+                    #CHANGED= sorted_commits[0].commit.committer.date
+                    #CHANGED=pr.changed_at
+                    #print ("CREATED:"+str(CREATED))
+                    #print ("CHANGED:"+str(CHANGED))
+                    #print ("*********************************************************")
+                    #########################################################################################
+                elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
+                    print  ("==> OLD done PR:"+str(counter))
+                    processed_pr.append[counter]
+                    #print ("counter:"+str(counter)+"  openline:"+str(openline)+" "+str(open_prs[openline])+"  doneline:"+str(doneline)+" "+str(done_prs[doneline]))
+                    #print ("*********************************************************")
+
+                
+                counter=counter+1
 
 ########################################################
+# Construct Hydra build command from PullRequests data
+# Record hadnled PR info to local db file
+#
 def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
+    print("")
     print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
-    print ("Target main branch:"+TARGET)
+    print ("--> Target main branch:"+TARGET)
     print ("--> Source branch:" +SOURCE)
     print ("--> Source repo:"+SOURCE_REPO)
     print ("--> PR number:"+str(PR))
     print ("--> HYDRACTL command: "+HYDRACTL) 
     print ("--> Hydra port:"+str(EXT_PORT))
     print ("--> Hydra server:"+SERVER)
-    print ("User:"+USER)
+    print ("--> User:"+USER)
     print ("Fake OK command execution detected, going to record fake PR as done deed")
-    print ("----------------------------------------------")
+    print ("")
     DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" From branch:"+SOURCE+"\""
     PROJECT=str(PR)+"-"+USER+"-"+SOURCE
     FLAKE="git+https://github.com/tiiuae/ghaf/?ref="+SOURCE
     JOBSET=str(PR)+"-"+SOURCE
-    print ("PROJECT:"+PROJECT)    
-    print ("DESCRIPTION:"+DESCRIPTION)
-    print ("FLAKE:"+FLAKE)
-    print("JOBSET:"+JOBSET)
+    print ("--> PROJECT:"+PROJECT)    
+    print ("--> DESCRIPTION:"+DESCRIPTION)
+    print ("--> FLAKE:"+FLAKE)
+    print("--> JOBSET:"+JOBSET)
     APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION 
     AJCOMMAND="python 3 "+HYDRACTL+" "+SERVER+" AJ --project "+PROJECT+" --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET
+    print ("")
     print ("APCOMMAND:"+APCOMMAND)
+    print ("")
     print ("AJCOMMAND:"+AJCOMMAND)
-    FAKEDONE=33+PR
+    FAKEDONE=33+PR # write PR number to db file, this is testing addition
     FAKEDONE=str(FAKEDONE)+"\r\n"
     myfile.write(FAKEDONE)
-    
+    print ("*******************************************************************************************************")
     
 ########################################################    
 if __name__ == "__main__":
