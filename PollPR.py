@@ -15,7 +15,7 @@ import urllib.request
 from urllib.request import Request, urlopen
 from collections import defaultdict
 import copy
-
+import time
 
 
 TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT
@@ -32,7 +32,8 @@ BUILDPRSFILE="pr2_data"
 
 
 # Hydra POC settings, change accordingly via conf file (TBD)
-HYDRACTL="../hydractl/hydractl.py" 
+#HYDRACTL="../hydractl/hydractl.py" 
+HYDRACTL="./hydractl.py"
 EXT_PORT=3030
 SERVER="http://localhost:"+str(EXT_PORT)
 
@@ -243,7 +244,18 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("")
     DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
     PROJECT=USER+"X"+SOURCE
+    #PROJECT=PROJECT.encode('ascii')
+    #string = "\xe2\x80\x9cThings"
+    ##bytes_string = bytes(PROJECT, encoding="raw_unicode_escape")
+    ##happy_result = PROJECT.encode("utf-8", "strict")
+    #PROJECT=str(happy_result)
+    #PROJECT=PROJECT.decode(UTF-8)
+    #print(happy_result)
     #FLAKE="git+https://github.com/tiiuae/ghaf/?ref="+SOURCE
+    PROJECT = PROJECT.encode('ascii',errors='ignore')
+    #Then convert it from bytes back to a string using:
+    PROJECT = PROJECT.decode()
+
     FLAKE="git+"+SOURCE_REPO+"/?ref="+SOURCE
     JOBSET=SOURCE+"X"+str(PR)
     print ("--> PROJECT:"+PROJECT)    
@@ -251,7 +263,7 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("--> FLAKE:"+FLAKE)
     print("--> JOBSET:"+JOBSET)
     APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION 
-    AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --project "+PROJECT+" --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET
+    AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET+" --project "+PROJECT
     print ("")
     print ("APCOMMAND:"+APCOMMAND)
     print ("")
@@ -259,9 +271,64 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     DONE=PR # write PR number to db file
     DONE=str(DONE)+"\r\n"
     myfile.write(DONE)
+    
+    # as executing commands from python file failed (jobset creation) and using same command was ok from shell
+    # saving commands to file and executing the content from the read file.....
+    # this is temp terrible POC only
+
+    cmdfile1 = open("cmdfile1", "w")  
+    #cmdfile1.seek(0) # only if mode a used
+    
+    cmdfile2 = open("cmdfile2", "w")  
+    #cmdfile2.seek(0)
+    FIRSTLINE="#!/bin/bash"+"\r\n"
+    
+    cmdfile1.write(FIRSTLINE)
+    cmdfile1.write(APCOMMAND)
+    
+    cmdfile2.write(FIRSTLINE)
+    cmdfile2.write(AJCOMMAND)
+
+    cmdfile1.close()
+    cmdfile2.close()
+
+    cmd1=open("cmdfile1","r")
+    APline1=cmd1.read()
+    print ("")
+    print("Executing APline1:"+str(APline1))
+    print("")
+    output = os.system(APline1)
+    time.sleep(2)
+    cmd2=open("cmdfile2","r")
+    AJline2=cmd2.read()
+    print("")
+    print("Executing AJline2:"+str(AJline2))
+    print("")
+    output = os.system(AJline2)
+
+    #clean temp commandfiles
+    os.remove("./cmdfile1")
+    os.remove("./cmdfile2")
+    time.sleep(2)
+
+    # command is expected to live in certain CI tool directory
+    #print ("EXECUTING:"+APCOMMAND)
+    #output = os.system(APCOMMAND)
+    #print ("Output:"+str(output))
+    #if (output != "Success"):
+    #    print(f"Got ERROR code: {output}", file=sys.stderr)
+    #time.sleep(20) # first need to be ready when second ran,  
+    
+    #print ("EXECUTING:"+AJCOMMAND)    
+    #output = os.system(APCOMMAND)
+    #print ("Output:"+str(output))
+    #if (output != "Success"):
+    #    print(f"Got ERROR code: {output}", file=sys.stderr)    
+
+    
+    
     print ("*******************************************************************************************************")
     
 ########################################################    
 if __name__ == "__main__":
     main(sys.argv[1:]) 
-    
