@@ -1,10 +1,12 @@
 #
+#
 # Get Github open pull requests for given branch (use number ID)
 # Show how to get one open pull request's source and target branches
 # Use existing (file db) to check what PRs have been build in the past in order to select new to be build
-# Aiming to be used with Hydra (Nixos) builder
+# 
+# Aiming to be used with Hydra (Nixos) builder for Ghaf project; Build new Pull Requests before merging to main line
 
-#mika.nokka1@gmail.com 13.62023
+# mika.nokka1@gmail.com 13.6.2023
 
 
 
@@ -18,34 +20,29 @@ import copy
 import time
 
 
-TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT
-#TESTREPO='mnokka-unikie/GithubActionForPR'
-#TESTPR='https://api.github.com/repos/mnokka-unikie/GithubActionForPR/pulls/1' # used in test known repo to have open pull requests
-#ORGANIZATION="tiiuae" # required organization membership before building PR
-#BUILDPRSFILE="pr_data"
+TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT, used to access Github repo
 
-TESTREPO='mnokka-unikie/ghaf'
+TESTREPO='mnokka-unikie/ghaf' # Repo under PR observations
 TESTPR='https://api.github.com/repos/mnokka-unikie/Ghaf/pulls' # used in test known repo to have open pull requests
 ORGANIZATION="tiiuae" # required organization membership before building PR
-BUILDPRSFILE="pr2_data"
+BUILDPRSFILE="pr2_data" # local file to store handled (built) Pull Requests by their Github ID
 
 
-
-# Hydra POC settings, change accordingly via conf file (TBD)
-#HYDRACTL="../hydractl/hydractl.py" 
-HYDRACTL="./hydractl.py"
-EXT_PORT=3030
+# Hydra build server POC related settings, change accordingly via conf file (TBD)
+HYDRACTL="./hydractl.py" # CLI command (Ghaf inhouse) to manage Hydra operations 
+EXT_PORT=3030 # Hybdra port dedicated for this POC build server
 SERVER="http://localhost:"+str(EXT_PORT)
-
 
 def main(argv):
     Finder()
 
-#############################################################################
+##########################################################################################
+# Check if any new (not built) pull requests exists in defined repo (fro main branch
+#
 def Finder():
     CREATED=""
     CHANGED=""
-    
+
     #########################################################################
     #Authorization to Github
     file_exists = os.path.exists(TOKENFILE)
@@ -77,21 +74,21 @@ def Finder():
         #print (pull.number)
         open_prs.update({pull.number: "ON"}) 
         i=i+1
-        
+
     if (i==0):
         print ("No open PRs found, exiting")    
         #print ("i:"+str(i))
         sys.exit(4)
 
     ###########################################################################
-    #read done PRs in from disk, initialize possible empty file 
+    #Read done PRs in from disk, initialize possible empty file 
     done_prs=defaultdict(lambda:"NONE")
     myfile = open(BUILDPRSFILE, "a+")  
     
     # add fictional done PR number to an empty file in order to keep logic running....
     if (os.stat(BUILDPRSFILE).st_size == 0):
         print ("No done PRs found, adding fictional PR number to an empty file")
-        FICTIONALPR=123456789 # there cant be so many PRs just like 640Kb is enough for running Dos programs
+        FICTIONALPR=123456789 # there cant be so many PRs just like 640Kb was enough for running Dos programs
         FICTIONALPR=str(FICTIONALPR)+"\r\n"
         myfile.seek(0) 
         myfile.write(FICTIONALPR)
@@ -117,7 +114,7 @@ def Finder():
     SOURCE="NONE"
     TARGET="NONE"  
     SOURCE_REPO="NONE"
-    ErroCounter=0
+    ErroCounter=0    print ("Fake OK command execution detected, going to record fake PR as done deed")
 
     for newPr in copy_open_prs:
         
@@ -163,7 +160,7 @@ def Finder():
                         SOURCE=data["head"]["ref"]
                     except KeyError:
                         print("ERROR: no head ref found")
-                        ErroCounter=ErroCounter+1  
+                        ErroCounter=ErroCounter+1
                         
                     try:
                         print("==> TARGET BRANCH (like main/master):"+data["base"]["ref"])
@@ -203,7 +200,7 @@ def Finder():
                     
 
                     ######################################################################################
-                    # Checking if done PR has been updated is under construction 
+                    # Checking if done PR has been updated ==>  UNDER CONSTRUCTIONS!!!!!!!!!!!
                     #pr=repo.get_pull(counter)
                     #CREATED=pr.created_at
                     #commits=pr.get_commits()
@@ -225,56 +222,49 @@ def Finder():
                 
                 counter=counter+1
 
-########################################################
-# Construct Hydra build command from PullRequests data
-# Record hadnled PR info to local db file
+##########################################################################################
+# Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
+# Record handled PR info to local db file
 #
 def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print("")
-    print("TBD: Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
+    print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
     print ("--> Target main branch:"+TARGET)
     print ("--> Source branch:" +SOURCE)
     print ("--> Source repo:"+SOURCE_REPO)
     print ("--> PR number:"+str(PR))
-    print ("--> HYDRACTL command: "+HYDRACTL) 
+    print ("--> HYDRACTL command location used: "+HYDRACTL) 
     print ("--> Hydra port:"+str(EXT_PORT))
     print ("--> Hydra server:"+SERVER)
     print ("--> User:"+USER)
-    print ("Fake OK command execution detected, going to record fake PR as done deed")
     print ("")
     DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
     PROJECT=USER+"X"+SOURCE
-    #PROJECT=PROJECT.encode('ascii')
-    #string = "\xe2\x80\x9cThings"
-    ##bytes_string = bytes(PROJECT, encoding="raw_unicode_escape")
-    ##happy_result = PROJECT.encode("utf-8", "strict")
-    #PROJECT=str(happy_result)
-    #PROJECT=PROJECT.decode(UTF-8)
-    #print(happy_result)
-    #FLAKE="git+https://github.com/tiiuae/ghaf/?ref="+SOURCE
+
+    #two phased convertings got this item usage working working....
     PROJECT = PROJECT.encode('ascii',errors='ignore')
     #Then convert it from bytes back to a string using:
     PROJECT = PROJECT.decode()
 
     FLAKE="git+"+SOURCE_REPO+"/?ref="+SOURCE
     JOBSET=SOURCE+"X"+str(PR)
-    print ("--> PROJECT:"+PROJECT)    
-    print ("--> DESCRIPTION:"+DESCRIPTION)
-    print ("--> FLAKE:"+FLAKE)
-    print("--> JOBSET:"+JOBSET)
+    print ("--> Hydra PROJECT:"+PROJECT)    
+    print ("--> Hydra DESCRIPTION:"+DESCRIPTION)
+    print ("--> Hydra FLAKE:"+FLAKE)
+    print("--> Hydra JOBSET:"+JOBSET)
     APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION 
     AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET+" --project "+PROJECT
     print ("")
-    print ("APCOMMAND:"+APCOMMAND)
+    print ("Hydra CLI APCOMMAND:"+APCOMMAND)
     print ("")
-    print ("AJCOMMAND:"+AJCOMMAND)
+    print ("Hydra CLI AJCOMMAND:"+AJCOMMAND)
     DONE=PR # write PR number to db file
     DONE=str(DONE)+"\r\n"
     myfile.write(DONE)
     
-    # as executing commands from python file failed (jobset creation) and using same command was ok from shell
+    # NOTE: As executing commands from Python file failed (Hydra jobset creation) and using same commands were ok from shell
     # saving commands to file and executing the content from the read file.....
-    # this is temp terrible POC only
+    # this is temp solution for this POC only
 
     cmdfile1 = open("cmdfile1", "w")  
     #cmdfile1.seek(0) # only if mode a used
@@ -295,14 +285,14 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     cmd1=open("cmdfile1","r")
     APline1=cmd1.read()
     print ("")
-    print("Executing APline1:"+str(APline1))
+    print("Executing AP command:"+str(APline1))
     print("")
     output = os.system(APline1)
     time.sleep(2)
     cmd2=open("cmdfile2","r")
     AJline2=cmd2.read()
     print("")
-    print("Executing AJline2:"+str(AJline2))
+    print("Executing AJ command:"+str(AJline2))
     print("")
     output = os.system(AJline2)
 
@@ -311,22 +301,6 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     os.remove("./cmdfile2")
     time.sleep(2)
 
-    # command is expected to live in certain CI tool directory
-    #print ("EXECUTING:"+APCOMMAND)
-    #output = os.system(APCOMMAND)
-    #print ("Output:"+str(output))
-    #if (output != "Success"):
-    #    print(f"Got ERROR code: {output}", file=sys.stderr)
-    #time.sleep(20) # first need to be ready when second ran,  
-    
-    #print ("EXECUTING:"+AJCOMMAND)    
-    #output = os.system(APCOMMAND)
-    #print ("Output:"+str(output))
-    #if (output != "Success"):
-    #    print(f"Got ERROR code: {output}", file=sys.stderr)    
-
-    
-    
     print ("*******************************************************************************************************")
     
 ########################################################    
