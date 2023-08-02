@@ -110,12 +110,12 @@ def Finder():
     # Process all repo's open pull requests
     tbd_list=[]
     processed_pr=[]
-    counter=1
+    counter=0
     SOURCE="NONE"
     TARGET="NONE"  
     SOURCE_REPO="NONE"
-    ErroCounter=0    print ("Fake OK command execution detected, going to record fake PR as done deed")
-
+    ErroCounter=0    
+    
     for newPr in copy_open_prs:
         
         url=TESTPR+"/"+str(newPr)
@@ -194,7 +194,7 @@ def Finder():
                             else:
                                 print("Errors in PR data from Github, not doing build activities")    
                     else:
-                        print(f"The user '{USER}' is not a member of the organization '{ORGANIZATION}'.")
+                        print("The user: '{USER}' is not a member of the organization '{ORGANIZATION}'")
                         print ("No build activities done")
                     print ("--------------------------------------------------------------------------------------------------")  
                     
