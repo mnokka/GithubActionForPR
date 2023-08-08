@@ -19,6 +19,7 @@ from collections import defaultdict
 import copy
 import time
 
+import subprocess
 
 TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT, used to access Github repo
 
@@ -140,13 +141,13 @@ def Finder():
                     print ("--------------------------------------------------------------------------------------------------")  
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
                     print  ("==> NEW PR, going to build this:"+str(counter))
-                    #tbd=counter
+                    
                     processed_pr.append(counter)
                     if (counter not in tbd_list):
                         tbd_list.append(counter)
                     else:
                         print("not adding")
-                    print ("--------------------------------------------------------------------------------------------------")  
+                    #print ("--------------------------------------------------------------------------------------------------")  
 
                     ##############################################################################
                     # parse PR info (from Github JSON)
@@ -191,6 +192,14 @@ def Finder():
                             print ("------> Handling PR number:"+str(counter))
                             if (ErroCounter==0):
                                 PRActions(SOURCE,counter,TARGET,myfile,USER,SOURCE_REPO)
+                                
+                                #processed_pr.append(counter)
+                                #if (counter not in tbd_list):
+                                #    tbd_list.append(counter)
+                                #else:
+                                #    print("not adding")
+                                #print ("--------------------------------------------------------------------------------------------------")  
+                                
                             else:
                                 print("Errors in PR data from Github, not doing build activities")    
                     else:
@@ -201,19 +210,20 @@ def Finder():
 
                     ######################################################################################
                     # Checking if done PR has been updated ==>  UNDER CONSTRUCTIONS!!!!!!!!!!!
-                    #pr=repo.get_pull(counter)
-                    #CREATED=pr.created_at
-                    #commits=pr.get_commits()
+                    print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+                    pr=repo.get_pull(counter)
+                    CREATED=pr.created_at
+                    commits=pr.get_commits()
                     # Checking if done PR has been update is under construction
                     # Sort the commits by the commit timestamp in descending order
-                    #sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
-                    #print ("commits:"+str(sorted_commits))
+                    sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
+                    print ("Found commits:"+str(sorted_commits))
                     # Get the timestamp of the most recent commit
-                    #CHANGED= sorted_commits[0].commit.committer.date
+                    CHANGED= sorted_commits[0].commit.committer.date
                     #CHANGED=pr.changed_at
-                    #print ("CREATED:"+str(CREATED))
-                    #print ("CHANGED:"+str(CHANGED))
-                    #print ("*********************************************************")
+                    print ("CREATED:"+str(CREATED))
+                    print ("CHANGED:"+str(CHANGED))
+                    print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
                     #########################################################################################
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
@@ -227,6 +237,7 @@ def Finder():
 # Record handled PR info to local db file
 #
 def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
+    OK_CMDEXE_COUNTER=0
     print("")
     print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
     print ("--> Target main branch:"+TARGET)
@@ -258,9 +269,9 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("Hydra CLI APCOMMAND:"+APCOMMAND)
     print ("")
     print ("Hydra CLI AJCOMMAND:"+AJCOMMAND)
-    DONE=PR # write PR number to db file
+    DONE=PR # write PR number to db file if both CMD exections are ok
     DONE=str(DONE)+"\r\n"
-    myfile.write(DONE)
+    #myfile.write(DONE)
     
     # NOTE: As executing commands from Python file failed (Hydra jobset creation) and using same commands were ok from shell
     # saving commands to file and executing the content from the read file.....
@@ -268,7 +279,6 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
 
     cmdfile1 = open("cmdfile1", "w")  
     #cmdfile1.seek(0) # only if mode a used
-    
     cmdfile2 = open("cmdfile2", "w")  
     #cmdfile2.seek(0)
     FIRSTLINE="#!/bin/bash"+"\r\n"
@@ -283,19 +293,34 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     cmdfile2.close()
 
     cmd1=open("cmdfile1","r")
-    APline1=cmd1.read()
-    print ("")
-    print("Executing AP command:"+str(APline1))
-    print("")
-    output = os.system(APline1)
+    APline1=cmd1.read()   
+    rc,out,err=ExeCMD(APline1)
+    if (rc != 0):
+        print("Command execution error:"+str(rc))
+        print ("Error message:"+str(err))
+    else:
+        print("OK command execution")
+        OK_CMDEXE_COUNTER +=1
+    
     time.sleep(2)
     cmd2=open("cmdfile2","r")
     AJline2=cmd2.read()
-    print("")
-    print("Executing AJ command:"+str(AJline2))
-    print("")
-    output = os.system(AJline2)
-
+    rc,out,err=ExeCMD(AJline2)
+    if (rc != 0):
+        print("Command execution error:"+str(rc))
+        print ("Error message:"+str(err))
+    else:
+        print("OK command execution")
+        OK_CMDEXE_COUNTER +=1
+        
+    if (OK_CMDEXE_COUNTER == 2):
+        print ("2 correct CMD executions, going to record PR:"+str(PR)+" as done deed")
+        myfile.write(DONE)
+    else:
+        print ("-------------------------------------------------------------------------------")
+        print ("ERROR ===> CMD executions errors found, NOT marking PR:"+str(PR)+" as done")
+        print ("-------------------------------------------------------------------------------")
+        
     #clean temp commandfiles
     os.remove("./cmdfile1")
     os.remove("./cmdfile2")
@@ -303,6 +328,27 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
 
     print ("*******************************************************************************************************")
     
+##############################################################
+# 
+def ExeCMD(commandLine):
+
+    print ("------------------------------------------------------------------------------------------")
+    print("Executing command:"+commandLine)    
+    print ("------------------------------------------------------------------------------------------")
+    
+    sp = subprocess.Popen(commandLine,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    rc=sp.wait()
+    out,err=sp.communicate()
+
+    #print('CMD return Code:',rc,'\n')
+    #print('CMD output is: \n', out)
+    #print('CMD error is: \n', err)
+
+    return rc,out,err
+
 ########################################################    
 if __name__ == "__main__":
     main(sys.argv[1:]) 
