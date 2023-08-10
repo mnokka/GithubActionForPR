@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from collections import defaultdict
 import copy
 import time
+from datetime import datetime
 
 import subprocess
 
@@ -109,13 +110,12 @@ def Finder():
     counter=1
     ###############################################################################
     # Process all repo's open pull requests
-    tbd_list=[]
     processed_pr=[]
-    counter=0
     SOURCE="NONE"
     TARGET="NONE"  
     SOURCE_REPO="NONE"
     ErroCounter=0    
+    
     
     for newPr in copy_open_prs:
         
@@ -124,9 +124,8 @@ def Finder():
             body = response.read()        
         data = json.loads(body)
 
-        
         for doneline in copy_done_prs:
-            
+               
                 #check duplicate PRs in db file
                 if (counter in processed_pr):
                     print (processed_pr)
@@ -197,7 +196,7 @@ def Finder():
                                 #if (counter not in tbd_list):
                                 #    tbd_list.append(counter)
                                 #else:
-                                #    print("not adding")
+                                #    print("not adding to done table ??")
                                 #print ("--------------------------------------------------------------------------------------------------")  
                                 
                             else:
@@ -223,12 +222,22 @@ def Finder():
                     #CHANGED=pr.changed_at
                     print ("CREATED:"+str(CREATED))
                     print ("CHANGED:"+str(CHANGED))
+
+                    date_format = "%Y-%m-%d %H:%M:%S"
+                    time_diff_mins = (CREATED - CHANGED).total_seconds() / 60
+                    print ("Time difference in minutes:",time_diff_mins)
+                    
+                    if (time_diff_mins > 10):
+                        print ("Possible change in open PR detected, requires rebuilding")
+                    else:
+                        ("No changes for open PR detected")
+                    
                     print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
                     #########################################################################################
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
-                    
+                
                 
                 counter=counter+1
 
@@ -329,6 +338,7 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("*******************************************************************************************************")
     
 ##############################################################
+#  Execute given command string and return system feedback
 # 
 def ExeCMD(commandLine):
 
