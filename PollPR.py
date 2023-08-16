@@ -136,19 +136,54 @@ def Finder():
         
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="DONE"):
                     print ("==> OLD PR in PR list, has been built:"+str(counter))
-                    processed_pr.append(counter)
+                    
+                    print ("Checking if this (still open) PR has been changed")
+                    pr=repo.get_pull(counter)
+                    answer=CheckChangedPR(pr,repo,counter)
+                    if (answer == "YES"):
+                        print ("Faking PR to be new and doing the build")
+                        timetoken=GetTimeToken()
+                        print ("Using timetoken:",timetoken," to differentiate from orginal PR build")
+                        
+                        processed_pr.append(counter)
+                        if (counter not in tbd_list):
+                            tbd_list.append(counter)
+                        else:
+                            print("not adding")
+                        
+                        PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
+                        #processed_pr.append(counter)
+                    #
+                    else:
+                        print ("No PR changes, no actions needed")
+                        processed_pr.append(counter)
                     print ("--------------------------------------------------------------------------------------------------")  
+                
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
                     print  ("==> NEW PR, going to build this:"+str(counter))
-                    
                     processed_pr.append(counter)
                     if (counter not in tbd_list):
                         tbd_list.append(counter)
                     else:
                         print("not adding")
-                    #print ("--------------------------------------------------------------------------------------------------")  
 
-                    ##############################################################################
+                    timetoken=""
+                    PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
+                    
+               
+                elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
+                    print  ("==> OLD done PR:"+str(counter))
+                    processed_pr.append[counter]
+                
+                
+                counter=counter+1
+
+
+#########################################################################################
+#
+def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
+
+##############################################################################
                     # parse PR info (from Github JSON)
                     SOURCE="NONE"
                     TARGET="NONE"  
@@ -190,15 +225,9 @@ def Finder():
                         if (counter in tbd_list):
                             print ("------> Handling PR number:"+str(counter))
                             if (ErroCounter==0):
-                                PRActions(SOURCE,counter,TARGET,myfile,USER,SOURCE_REPO)
-                                
-                                #processed_pr.append(counter)
-                                #if (counter not in tbd_list):
-                                #    tbd_list.append(counter)
-                                #else:
-                                #    print("not adding to done table ??")
-                                #print ("--------------------------------------------------------------------------------------------------")  
-                                
+                           
+                                PRActions(SOURCE,counter,TARGET,myfile,USER,SOURCE_REPO,timetoken)
+
                             else:
                                 print("Errors in PR data from Github, not doing build activities")    
                     else:
@@ -206,14 +235,19 @@ def Finder():
                         print ("No build activities done")
                     print ("--------------------------------------------------------------------------------------------------")  
                     
+                    #pr=repo.get_pull(counter)
+                    #answer=CheckChangedPR(pr,repo,counter)
+                    #print("answer:",answer)
 
-                    ######################################################################################
-                    # Checking if done PR has been updated ==>  UNDER CONSTRUCTIONS!!!!!!!!!!!
-                    print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+#########################################################################################
+# Check if PR (still open) has been changed since creation time
+#
+def CheckChangedPR(pr,repo,counter):
+
+                    print("Checking PR:",pr)
                     pr=repo.get_pull(counter)
                     CREATED=pr.created_at
                     commits=pr.get_commits()
-                    # Checking if done PR has been update is under construction
                     # Sort the commits by the commit timestamp in descending order
                     sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
                     print ("Found commits:"+str(sorted_commits))
@@ -224,28 +258,22 @@ def Finder():
                     print ("CHANGED:"+str(CHANGED))
 
                     date_format = "%Y-%m-%d %H:%M:%S"
-                    time_diff_mins = (CREATED - CHANGED).total_seconds() / 60
+                    time_diff_mins = (CHANGED - CREATED).total_seconds() / 60
                     print ("Time difference in minutes:",time_diff_mins)
                     
                     if (time_diff_mins > 10):
                         print ("Possible change in open PR detected, requires rebuilding")
+                        return "YES"
                     else:
                         ("No changes for open PR detected")
+                        return "NO"
                     
-                    print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
-                    #########################################################################################
-                elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
-                    print  ("==> OLD done PR:"+str(counter))
-                    processed_pr.append[counter]
-                
-                
-                counter=counter+1
 
 ##########################################################################################
 # Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
 # Record handled PR info to local db file
 #
-def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
+def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     OK_CMDEXE_COUNTER=0
     print("")
     print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
@@ -257,17 +285,26 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO):
     print ("--> Hydra port:"+str(EXT_PORT))
     print ("--> Hydra server:"+SERVER)
     print ("--> User:"+USER)
+    print ("--> Timetoken:"+timetoken)
     print ("")
     DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
-    PROJECT=USER+"X"+SOURCE
-
+    
+    if (len(timetoken) == 0):
+       PROJECT=USER+"X"+SOURCE
+    else:
+        PROJECT=USER+"X"+SOURCE+"X"+timetoken
+        
     #two phased convertings got this item usage working working....
     PROJECT = PROJECT.encode('ascii',errors='ignore')
     #Then convert it from bytes back to a string using:
     PROJECT = PROJECT.decode()
 
     FLAKE="git+"+SOURCE_REPO+"/?ref="+SOURCE
-    JOBSET=SOURCE+"X"+str(PR)
+    if (len(timetoken) == 0):
+        JOBSET=SOURCE+"X"+str(PR)
+    else: 
+        JOBSET=SOURCE+"X"+str(PR)+"X"+timetoken
+        
     print ("--> Hydra PROJECT:"+PROJECT)    
     print ("--> Hydra DESCRIPTION:"+DESCRIPTION)
     print ("--> Hydra FLAKE:"+FLAKE)
@@ -353,11 +390,22 @@ def ExeCMD(commandLine):
     rc=sp.wait()
     out,err=sp.communicate()
 
-    #print('CMD return Code:',rc,'\n')
-    #print('CMD output is: \n', out)
-    #print('CMD error is: \n', err)
-
     return rc,out,err
+
+############################################################################
+# Create datetime token (like 15.10.1971 15:00 ---> 151019711500)
+# 
+def GetTimeToken():
+    now = datetime.now()
+    day = now.strftime("%d")
+    month = now.strftime("%m")
+    year = now.strftime("%Y")
+    hour = now.strftime("%H")
+    minute = now.strftime("%M")
+    
+    date_time_string = day + month + year + hour + minute
+    return date_time_string
+
 
 ########################################################    
 if __name__ == "__main__":
