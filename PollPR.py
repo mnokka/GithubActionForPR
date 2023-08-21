@@ -28,6 +28,7 @@ TESTREPO='mnokka-unikie/ghaf' # Repo under PR observations
 TESTPR='https://api.github.com/repos/mnokka-unikie/Ghaf/pulls' # used in test known repo to have open pull requests
 ORGANIZATION="tiiuae" # required organization membership before building PR
 BUILDPRSFILE="pr2_data" # local file to store handled (built) Pull Requests by their Github ID
+BUILDCHANGEDPRSFILE="pr2_changed_data" # local file to store builds done for open, allready built, but PR having changes being made 
 
 
 # Hydra build server POC related settings, change accordingly via conf file (TBD)
@@ -83,9 +84,10 @@ def Finder():
         sys.exit(4)
 
     ###########################################################################
-    #Read done PRs in from disk, initialize possible empty file 
+    #Read done PRs in from disk, initialize possible empty bookkeeping files 
     done_prs=defaultdict(lambda:"NONE")
     myfile = open(BUILDPRSFILE, "a+")  
+    myChangedfile= open(BUILDCHANGEDPRSFILE, "a+")
     
     # add fictional done PR number to an empty file in order to keep logic running....
     if (os.stat(BUILDPRSFILE).st_size == 0):
@@ -95,6 +97,15 @@ def Finder():
         myfile.seek(0) 
         myfile.write(FICTIONALPR)
         
+    # add fictional changed PR number (and timetoken) to an empty file in order to keep logic running....
+    if (os.stat(BUILDCHANGEDPRSFILE).st_size == 0):
+        print ("No done PRs file found, adding fictional PR number and change time to an empty file")
+        FICTIONALPR=123456789 # there cant be so many PRs just like 640Kb was enough for running Dos programs
+        FICTIONALCHANGETIME="2020-02-02-23-00-00"
+        FICTIONALCHANGEPR=str(FICTIONALPR)+","+FICTIONALCHANGETIME+"\r\n"
+        myChangedfile.seek(0) 
+        myChangedfile.write(FICTIONALCHANGEPR)    
+    ##########################################################################################################
     
     myfile.seek(0) # a+ adds fd to end of file, for appends, we need to read from start
     print ("------Built PR numbers from the DB file: "+BUILDPRSFILE+" ------")
@@ -139,11 +150,12 @@ def Finder():
                     
                     print ("Checking if this (still open) PR has been changed")
                     pr=repo.get_pull(counter)
-                    answer=CheckChangedPR(pr,repo,counter)
+                    answer,changetime=CheckChangedPR(pr,repo,counter)
                     if (answer == "YES"):
-                        print ("Faking PR to be new and doing the build")
-                        timetoken=GetTimeToken()
-                        print ("Using timetoken:",timetoken," to differentiate from orginal PR build")
+                        print ("PR has been changed indeed")
+                        #timetoken=GetTimeToken()
+                        #print ("Using timetoken:",timetoken," to differentiate from orginal PR build")
+                        print ("PR change timetoken in use:"+str(changetime))
                         
                         processed_pr.append(counter)
                         if (counter not in tbd_list):
@@ -151,7 +163,16 @@ def Finder():
                         else:
                             print("not adding")
                         
-                        PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
+                        changeTimeCleaned = str(changetime).replace(" ", "-") # hydra doesnt like spaces in arguments, nor :
+                        changeTimeCleaned=changeTimeCleaned.replace(":","-")
+                        print ("Cleaned (book keeping) timetoken:"+changeTimeCleaned)
+                        
+                        answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned,BUILDCHANGEDPRSFILE)
+                        if (answer=="YES"):
+                            PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,changeTimeCleaned)
+                        else:
+                            print ("")
+                        
                         #processed_pr.append(counter)
                     #
                     else:
@@ -262,11 +283,11 @@ def CheckChangedPR(pr,repo,counter):
                     print ("Time difference in minutes:",time_diff_mins)
                     
                     if (time_diff_mins > 10):
-                        print ("Possible change in open PR detected, requires rebuilding")
-                        return "YES"
+                        print ("Possible change in open PR detected, may require rebuilding")
+                        return "YES",CHANGED
                     else:
                         ("No changes for open PR detected")
-                        return "NO"
+                        return "NO",""
                     
 
 ##########################################################################################
@@ -288,7 +309,14 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     print ("--> Timetoken:"+timetoken)
     print ("")
     DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
-    
+                                    
+                                #processed_pr.append(counter)
+                                #if (counter not in tbd_list):
+                                #    tbd_list.append(counter)
+                                #else:
+                                #    print("not adding to done table ??")
+                                #print ("--------------------------------------------------------------------------------------------------")  
+                                
     if (len(timetoken) == 0):
        PROJECT=USER+"X"+SOURCE
     else:
@@ -360,8 +388,11 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
         OK_CMDEXE_COUNTER +=1
         
     if (OK_CMDEXE_COUNTER == 2):
-        print ("2 correct CMD executions, going to record PR:"+str(PR)+" as done deed")
-        myfile.write(DONE)
+        if (len(timetoken) == 0):
+            print ("2 correct CMD executions,NEW build, going to record PR:"+str(PR)+" as done deed")
+            myfile.write(DONE)
+        else:
+            print ("2 correct CMD executions, CHANGED PR build, going to record PR:"+str(PR)+" with CHANGE time:"+timetoken+" to own db file")
     else:
         print ("-------------------------------------------------------------------------------")
         print ("ERROR ===> CMD executions errors found, NOT marking PR:"+str(PR)+" as done")
@@ -407,6 +438,72 @@ def GetTimeToken():
     return date_time_string
 
 
-########################################################    
+########################################################  
+#
+def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
+    #print ("GetChangePRData executing for PR:"+str(pr))
+    #print ("counter:"+str(counter))
+    print ("-----------------------------------------------------")
+    pr=str(counter)
+    myChangedfile.seek(0) # we need to read from start
+    print ("Changed PR numbers and change times from the DB file: "+BUILDCHANGEDPRSFILE)
+    foundnewtime=0
+    #filefoudnewPR=0
+    PRCount=0
+    FilePRNumbers=[]
+    ContentOfFilePRNumber=[]
+    
+    myChangedfile.seek(0)
+    for one_line in myChangedfile:
+       PRCount=PRCount+1
+       ContentOfFilePRNumber.append(one_line) # get tuntime copy for possible changes
+    PRCount=PRCount-1 # fictional first value
+    print ("Existing PRs with done change builds:"+str(PRCount))
+   
+    myChangedfile.seek(0) 
+    for one_line in myChangedfile:
+        #print ("Changed PR line:"+one_line)
+        
+        values = one_line.strip().split(",")
+        readPR=values[0]
+        readChangetime=values[1:] 
+        
+        #print ("readPR:"+readPR+"   pr:"+pr)
+        if (readPR == pr):
+            FilePRNumbers.append(pr)
+            count=len(readChangetime)
+            newChangetime=""          
+            for item in readChangetime:
+                print  ("Latest changetime found/build for this PR:"+item)
+                if (changetime==item):
+                    print ("Changetime is same as in latest done build. No actions needed")
+                    count=count-1
+                else:
+                    print ("Internal: No match with current changetime list item...")
+                newChangetime=item
+            if (count>0):
+                print ("New changetime found:"+str(newChangetime))
+                foundnewtime=foundnewtime+1
+         
+                
+    if (pr in FilePRNumbers and foundnewtime==0):
+         print ("No new PRs nor existing PRs with new changes found. No actions needed")
+         return "NO"
+    elif (pr not in FilePRNumbers):
+        print ("New PR:"+pr+" with changes found. Cleaned changetime:"+changetime)    
+        print ("Going to update changed PRs file!")
+        addline=pr+","+changetime
+        ContentOfFilePRNumber.append(addline)
+        myChangedfile.seek(0)
+        for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again. 
+            niceline=line+"\r"
+            myChangedfile.write(niceline)
+        return "YES"
+        
+    #for line in ContentOfFilePRNumber:
+    #    print ("line:"+line)
+
+
+########################################################  
 if __name__ == "__main__":
     main(sys.argv[1:]) 
