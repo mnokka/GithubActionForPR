@@ -1,12 +1,10 @@
-#
-#
-# Get Github open pull requests for given branch (use number ID)
-# Show how to get one open pull request's source and target branches
-# Use existing (file db) to check what PRs have been build in the past in order to select new to be build
-# 
-# Aiming to be used with Hydra (Nixos) builder for Ghaf project; Build new Pull Requests before merging to main line
+# Aiming to be used with Hydra (Nixos) builder for Ghaf project 
 
-# mika.nokka1@gmail.com 13.6.2023
+# Build new Pull Requests when they are created (for the main repo under observations)
+# Rebuild still open (and previously built) PR if there has been cnew hanges for that PR
+
+
+# Author mika.nokka1@gmail.com 13.6.2023
 
 
 
@@ -19,35 +17,62 @@ from collections import defaultdict
 import copy
 import time
 from datetime import datetime
-
+import schedule
 import subprocess
 
-TOKENFILE="tokenfile" # NOT TO BE STORED PUBLIC GIT, used to access Github repo
 
+###########################################################################################
+# Configurations 
+############################################################################################
+
+TOKENFILE="tokenfile" # KEEP TOKENFILE PRIVATE, NOT TO BE STORED PUBLIC GIT, used to access Github repo for PR observations
 TESTREPO='mnokka-unikie/ghaf' # Repo under PR observations
-TESTPR='https://api.github.com/repos/mnokka-unikie/Ghaf/pulls' # used in test known repo to have open pull requests
-ORGANIZATION="tiiuae" # required organization membership before building PR
-BUILDPRSFILE="pr2_data" # local file to store handled (built) Pull Requests by their Github ID
+#TESTPR='https://api.github.com/repos/mnokka-unikie/Ghaf/pulls' # URL to check open PRs
+TESTPR="https://api.github.com/repos/"+TESTREPO+"/pulls"
+
+ORGANIZATION="tiiuae" # required Github organization membership before building PR proceeds
+BUILDPRSFILE="pr2_data" # local file to store handled (built) PRs by their Github ID 
 BUILDCHANGEDPRSFILE="pr2_changed_data" # local file to store builds done for open, allready built, but PR having changes being made 
 
 
-# Hydra build server POC related settings, change accordingly via conf file (TBD)
-HYDRACTL="./hydractl.py" # CLI command (Ghaf inhouse) to manage Hydra operations 
+# Hydra build server related settings
+HYDRACTL="./hydractl.py" # CLI command (Ghaf inhouse public tool) to manage Hydra operations 
 EXT_PORT=3030 # Hybdra port dedicated for this POC build server
-SERVER="http://localhost:"+str(EXT_PORT)
+SERVER="http://localhost:"+str(EXT_PORT) # Hydra build server to be commanded
+
+RUNDELAY=1 # minutes to wait before next execution of this script
+
+#########################################################################################################
 
 def main(argv):
+    #schedule.every(RUNDELAY.minutes.do(Finder) # exucute this script periodically
+    #print ("PR detector started, running every "+str(RUNDELAY)+"minutes")
+    #while True:
+    #   schedule.run_pending()
+
+
     Finder()
 
 ##########################################################################################
 # Check if any new (not built) pull requests exists in defined repo (fro main branch
 #
 def Finder():
+    
+    
+    current_time = datetime.now()
+    formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+    print ("----------------------------------------------------------------------------------------")
+    print("---------- Execution started:", formatted_time,"---------------")
+    print ("----------------------------------------------------------------------------------------")
+    
     CREATED=""
     CHANGED=""
 
     #########################################################################
     #Authorization to Github
+    #Tokenfile used to provide token for observed Github Repo access
+    #DO NOT STORE TOKENFILE TO GITHUB, KEEP IT PRIVATE
+    #
     file_exists = os.path.exists(TOKENFILE)
     if (file_exists):
             file = open(TOKENFILE, "r")
@@ -66,9 +91,8 @@ def Finder():
     pulls = repo.get_pulls(state='open', sort='created', base='main')
     
 
-    
     ##########################################################################
-    # Get all open prs into a dictionary
+    # Get all open PRs into a dictionary for data processing
     i=0
     open_prs=defaultdict(lambda:"OFF")
     print ("------ All open PullRequest for repo: "+TESTREPO+" -------")
@@ -83,16 +107,17 @@ def Finder():
         #print ("i:"+str(i))
         sys.exit(4)
 
-    ###########################################################################
-    #Read done PRs in from disk, initialize possible empty bookkeeping files 
+    ####################################################################################
+    #Read allready built PRs from disk, initialize possible empty bookkeeping files 
+    #
     done_prs=defaultdict(lambda:"NONE")
     myfile = open(BUILDPRSFILE, "a+")  
     myChangedfile= open(BUILDCHANGEDPRSFILE, "a+")
     
-    # add fictional done PR number to an empty file in order to keep logic running....
+    # add fictional done PR number to an empty file in order to keep logic running
     if (os.stat(BUILDPRSFILE).st_size == 0):
         print ("No done PRs found, adding fictional PR number to an empty file")
-        FICTIONALPR=123456789 # there cant be so many PRs just like 640Kb was enough for running Dos programs
+        FICTIONALPR=123456789 
         FICTIONALPR=str(FICTIONALPR)+"\r\n"
         myfile.seek(0) 
         myfile.write(FICTIONALPR)
@@ -100,7 +125,7 @@ def Finder():
     # add fictional changed PR number (and timetoken) to an empty file in order to keep logic running....
     if (os.stat(BUILDCHANGEDPRSFILE).st_size == 0):
         print ("No done PRs file found, adding fictional PR number and change time to an empty file")
-        FICTIONALPR=123456789 # there cant be so many PRs just like 640Kb was enough for running Dos programs
+        FICTIONALPR=123456789 
         FICTIONALCHANGETIME="2020-02-02-23-00-00"
         FICTIONALCHANGEPR=str(FICTIONALPR)+","+FICTIONALCHANGETIME+"\r\n"
         myChangedfile.seek(0) 
@@ -112,7 +137,6 @@ def Finder():
     for one_pr_number in myfile:
         print (str(one_pr_number),end='')
         done_prs[int(one_pr_number)]="DONE"
-    
     
     print("------ Checking which open PRs are new and require building ------")
     copy_done_prs=copy.copy(done_prs) # shallow copies are iterared over as defaultdict changes dict size when default value must be returned
@@ -127,7 +151,6 @@ def Finder():
     SOURCE_REPO="NONE"
     ErroCounter=0    
     
-    
     for newPr in copy_open_prs:
         
         url=TESTPR+"/"+str(newPr)
@@ -136,7 +159,7 @@ def Finder():
         data = json.loads(body)
 
         for doneline in copy_done_prs:
-               
+            
                 #check duplicate PRs in db file
                 if (counter in processed_pr):
                     print (processed_pr)
@@ -144,37 +167,32 @@ def Finder():
                     counter=counter+1
                     print ("--------------------------------------------------------------------------------------------------")  
                     break
-        
+
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="DONE"):
                     print ("==> OLD PR in PR list, has been built:"+str(counter))
-                    
+
                     print ("Checking if this (still open) PR has been changed")
                     pr=repo.get_pull(counter)
                     answer,changetime=CheckChangedPR(pr,repo,counter)
                     if (answer == "YES"):
-                        print ("PR has been changed indeed")
-                        #timetoken=GetTimeToken()
-                        #print ("Using timetoken:",timetoken," to differentiate from orginal PR build")
-                        print ("PR change timetoken in use:"+str(changetime))
-                        
+                        print ("PR changed, timetoken in use:"+str(changetime))
+
                         processed_pr.append(counter)
                         if (counter not in tbd_list):
                             tbd_list.append(counter)
                         else:
                             print("not adding")
-                        
+
                         changeTimeCleaned = str(changetime).replace(" ", "-") # hydra doesnt like spaces in arguments, nor :
                         changeTimeCleaned=changeTimeCleaned.replace(":","-")
                         print ("Cleaned (book keeping) timetoken:"+changeTimeCleaned)
-                        
+
                         answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned,BUILDCHANGEDPRSFILE)
                         if (answer=="YES"):
                             PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,changeTimeCleaned)
                         else:
                             print ("")
-                        
-                        #processed_pr.append(counter)
-                    #
+
                     else:
                         print ("No PR changes, no actions needed")
                         processed_pr.append(counter)
@@ -201,10 +219,10 @@ def Finder():
 
 
 #########################################################################################
+# If PR creator is in defined Github membership, initate Hydra build definition actions
 #
 def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
 
-##############################################################################
                     # parse PR info (from Github JSON)
                     SOURCE="NONE"
                     TARGET="NONE"  
@@ -255,10 +273,7 @@ def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
                         print("The user: '{USER}' is not a member of the organization '{ORGANIZATION}'")
                         print ("No build activities done")
                     print ("--------------------------------------------------------------------------------------------------")  
-                    
-                    #pr=repo.get_pull(counter)
-                    #answer=CheckChangedPR(pr,repo,counter)
-                    #print("answer:",answer)
+
 
 #########################################################################################
 # Check if PR (still open) has been changed since creation time
@@ -281,14 +296,13 @@ def CheckChangedPR(pr,repo,counter):
                     date_format = "%Y-%m-%d %H:%M:%S"
                     time_diff_mins = (CHANGED - CREATED).total_seconds() / 60
                     print ("Time difference in minutes:",time_diff_mins)
-                    
+
                     if (time_diff_mins > 10):
                         print ("Possible change in open PR detected, may require rebuilding")
                         return "YES",CHANGED
                     else:
                         ("No changes for open PR detected")
                         return "NO",""
-                    
 
 ##########################################################################################
 # Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
@@ -309,20 +323,13 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     print ("--> Timetoken:"+timetoken)
     print ("")
     DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
-                                    
-                                #processed_pr.append(counter)
-                                #if (counter not in tbd_list):
-                                #    tbd_list.append(counter)
-                                #else:
-                                #    print("not adding to done table ??")
-                                #print ("--------------------------------------------------------------------------------------------------")  
-                                
+
     if (len(timetoken) == 0):
        PROJECT=USER+"X"+SOURCE
     else:
         PROJECT=USER+"X"+SOURCE+"X"+timetoken
         
-    #two phased convertings got this item usage working working....
+    #two phased convertings got this item usage working ...
     PROJECT = PROJECT.encode('ascii',errors='ignore')
     #Then convert it from bytes back to a string using:
     PROJECT = PROJECT.decode()
@@ -433,22 +440,20 @@ def GetTimeToken():
     year = now.strftime("%Y")
     hour = now.strftime("%H")
     minute = now.strftime("%M")
-    
     date_time_string = day + month + year + hour + minute
     return date_time_string
 
 
-########################################################  
+###########################################################################  
+# Check if detected change in PR is a new one or has been allready built
+# In case a new one, update database file (also if new change for open PR is detected)
 #
 def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
-    #print ("GetChangePRData executing for PR:"+str(pr))
-    #print ("counter:"+str(counter))
-    print ("-----------------------------------------------------")
+    print ("")
     pr=str(counter)
     myChangedfile.seek(0) # we need to read from start
     print ("Changed PR numbers and change times from the DB file: "+BUILDCHANGEDPRSFILE)
     foundnewtime=0
-    #filefoudnewPR=0
     PRCount=0
     FilePRNumbers=[]
     ContentOfFilePRNumber=[]
@@ -456,19 +461,17 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     myChangedfile.seek(0)
     for one_line in myChangedfile:
        PRCount=PRCount+1
-       ContentOfFilePRNumber.append(one_line) # get tuntime copy for possible changes
+       ContentOfFilePRNumber.append(one_line) # get runtime copy for possible changes
     PRCount=PRCount-1 # fictional first value
     print ("Existing PRs with done change builds:"+str(PRCount))
    
     myChangedfile.seek(0) 
     for one_line in myChangedfile:
         #print ("Changed PR line:"+one_line)
-        
         values = one_line.strip().split(",")
         readPR=values[0]
         readChangetime=values[1:] 
         
-        #print ("readPR:"+readPR+"   pr:"+pr)
         if (readPR == pr):
             FilePRNumbers.append(pr)
             count=len(readChangetime)
@@ -496,14 +499,13 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         ContentOfFilePRNumber.append(addline)
         myChangedfile.seek(0)
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again. 
-            niceline=line+"\r"
+            niceline=line+"\r\n"
             myChangedfile.write(niceline)
         return "YES"
-        
-    #for line in ContentOfFilePRNumber:
-    #    print ("line:"+line)
 
 
 ########################################################  
 if __name__ == "__main__":
     main(sys.argv[1:]) 
+
+
