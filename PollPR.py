@@ -461,6 +461,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     myChangedfile.seek(0)
     for one_line in myChangedfile:
        PRCount=PRCount+1
+       print (one_line)
        ContentOfFilePRNumber.append(one_line) # get runtime copy for possible changes
     PRCount=PRCount-1 # fictional first value
     print ("Existing PRs with done change builds:"+str(PRCount))
@@ -475,32 +476,79 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         if (readPR == pr):
             FilePRNumbers.append(pr)
             count=len(readChangetime)
-            newChangetime=""          
-            for item in readChangetime:
-                print  ("Latest changetime found/build for this PR:"+item)
-                if (changetime==item):
-                    print ("Changetime is same as in latest done build. No actions needed")
-                    count=count-1
-                else:
-                    print ("Internal: No match with current changetime list item...")
-                newChangetime=item
-            if (count>0):
-                print ("New changetime found:"+str(newChangetime))
-                foundnewtime=foundnewtime+1
+            newChangetime=""
+            latestChangetime=""
+            
+            if (changetime in readChangetime):
+                print ("Changetime found from PR built changes list")
+            else:
+                print ("Found new changed time for this PR")
+                foundnewtime=1
+            #for item in readChangetime:
+            #    print  ("Latest changetime found/build for this PR:"+item)
+            #    if (changetime==item):
+            #        print ("Changetime is same as in latest done build. No actions needed")
+            #        count=count-1
+            #    else:
+            #        print ("Internal: No match with current changetime list item...")
+                    
+                    
+             #   newChangetime=item
+            #if (count>0):
+            #    print ("New changetime found:"+str(newChangetime))
+            #    foundnewtime=foundnewtime+1
          
                 
     if (pr in FilePRNumbers and foundnewtime==0):
          print ("No new PRs nor existing PRs with new changes found. No actions needed")
          return "NO"
+    elif (pr in FilePRNumbers and foundnewtime>0):
+         print ("Existing PRs with new changes found")
+         print ("Going to update changed PRs file!")
+         #tmpline=pr+","
+         #tmpline2=",".join(readChangetime)
+         #addline=tmpline+tmpline2+","+changetime
+         addline=pr+","+changetime
+         
+         print ("addline:"+addline)
+         #ContentOfFilePRNumber.append(addline)
+         matching_index = None 
+         for index, item in enumerate(ContentOfFilePRNumber):
+             if item.startswith(pr):
+                 matching_index = index
+                 print("Internal matching_index:"+str(matching_index))
+                 break  
+         if (matching_index is not None):
+             ContentOfFilePRNumber[matching_index]=addline
+         else:
+             print ("Internal: Can't change PR change time list")
+         
+         myChangedfile.close()
+         myChangedfile = open(BUILDCHANGEDPRSFILE, "w") 
+         myChangedfile.seek(0)
+         
+         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again. 
+             print ("Writing line:"+line)
+             niceline=line
+             myChangedfile.write(niceline)
+             myChangedfile.close()
+             myChangedfile = open(BUILDCHANGEDPRSFILE, "a") 
+         return "YES"
+     
+     
     elif (pr not in FilePRNumbers):
         print ("New PR:"+pr+" with changes found. Cleaned changetime:"+changetime)    
         print ("Going to update changed PRs file!")
         addline=pr+","+changetime
         ContentOfFilePRNumber.append(addline)
-        myChangedfile.seek(0)
+        #myChangedfile.seek(0)
+        myChangedfile.close()
+        myChangedfile = open(BUILDCHANGEDPRSFILE, "w") 
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again. 
-            niceline=line+"\r\n"
+            niceline=line
             myChangedfile.write(niceline)
+            myChangedfile.close()
+            myChangedfile = open(BUILDCHANGEDPRSFILE, "a") 
         return "YES"
 
 
