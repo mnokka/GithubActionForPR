@@ -1,11 +1,12 @@
-# Aiming to be used with Hydra (Nixos) builder for Ghaf project 
+# Aiming to be used with Hydra (Nixos) builder for Ghaf project https://github.com/tiiuae/ghaf
 
-# Build new Pull Requests when they are created (for the main repo under observations)
+# Activate Hydra to build new Pull Requests when they are created (for the main repo under observations)
 # Rebuild still open (and previously built) PR if there has been cnew hanges for that PR
-
+# Uses Ghaf build tools from https://github.com/tiiuae/ci-public
 
 # Author mika.nokka1@gmail.com 13.6.2023
 
+# USAGE: PollPr.py for one off checking run,   PollPr.pr <s> to start sceduled running of the tool
 
 
 from github import Github
@@ -25,9 +26,9 @@ import subprocess
 # Configurations 
 ############################################################################################
 
+# Github related settings
 TOKENFILE="tokenfile" # KEEP TOKENFILE PRIVATE, NOT TO BE STORED PUBLIC GIT, used to access Github repo for PR observations
 TESTREPO='mnokka-unikie/ghaf' # Repo under PR observations
-#TESTPR='https://api.github.com/repos/mnokka-unikie/Ghaf/pulls' # URL to check open PRs
 TESTPR="https://api.github.com/repos/"+TESTREPO+"/pulls"
 
 ORGANIZATION="tiiuae" # required Github organization membership before building PR proceeds
@@ -42,22 +43,12 @@ SERVER="http://localhost:"+str(EXT_PORT) # Hydra build server to be commanded
 
 RUNDELAY=1 # minutes to wait before next execution of this script
 
+# HYDRACTL_USERNAME and HYDRACTL_PASSWORD environment variables (Hydra admin account) must be defined. DO NOT STORE TO PUBLIC GIHUB
+# Use for example .sh file which exports them in shell when sourced 
+
 #########################################################################################################
 
 def main(argv):
-    #schedule.every(RUNDELAY.minutes.do(Finder) # exucute this script periodically
-    #print ("PR detector started, running every "+str(RUNDELAY)+"minutes")
-    #while True:
-    #   schedule.run_pending()
-
-
-    Finder()
-
-##########################################################################################
-# Check if any new (not built) pull requests exists in defined repo (fro main branch
-#
-def Finder():
-    
     
     current_time = datetime.now()
     formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -65,6 +56,51 @@ def Finder():
     print("---------- Execution started:", formatted_time,"---------------")
     print ("----------------------------------------------------------------------------------------")
     
+    
+    username = os.getenv("HYDRACTL_USERNAME")
+    if username == None:
+        print ("No Hydra admin account HYDRACTL_USERNAME env variable defined",file=sys.stderr)
+        print ("Exiting!!")
+        sys.exit(3)
+    
+    passu = os.getenv("HYDRACTL_PASSWORD")   
+    if passu == None:
+        print ("No Hydra admin account HYDRACTL_PASSWORD= env variable defined",file=sys.stderr)
+        print ("Exiting!!")
+        sys.exit(3)       
+        
+    
+    
+    if len(sys.argv) > 1:
+        argument = sys.argv[1] 
+        if (argument=="s"):
+            print ("PR detector started, running every "+str(RUNDELAY)+" minutes")
+            print ("Build db files:"+BUILDPRSFILE+" (build PRs) and "+BUILDCHANGEDPRSFILE+" (build PRs with changes) ")
+            print ("Observing Github repo (main) PRs:"+TESTREPO)
+            print ("Organization participation required for PR building:"+ORGANIZATION)
+            print ("Using Hydra build server:"+SERVER)
+            print ("Assuming Hydra CLI command to be:"+HYDRACTL)
+            print ("Only PRs to main branch are processed")
+            schedule.every(RUNDELAY).minutes.do(Finder)
+            while True:
+               schedule.run_pending() 
+               time.sleep(1)
+        else:
+            print ("Unknown arg, use <s> for periodic running of this script")
+            print("Running in default one-off mode")
+            Finder()
+    else:
+        print("Running in default one-off mode")
+        Finder()
+
+
+##########################################################################################
+# Check if any new (not built) pull requests exists in defined repo (fro main branch
+#
+def Finder():
+    
+    
+    print ("------------------------------------------------------------------------------------------")
     CREATED=""
     CHANGED=""
 
@@ -104,7 +140,6 @@ def Finder():
 
     if (i==0):
         print ("No open PRs found, exiting")    
-        #print ("i:"+str(i))
         sys.exit(4)
 
     ####################################################################################
@@ -209,11 +244,9 @@ def Finder():
                     timetoken=""
                     PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
                     
-               
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
-                
                 
                 counter=counter+1
 
@@ -430,19 +463,6 @@ def ExeCMD(commandLine):
 
     return rc,out,err
 
-############################################################################
-# Create datetime token (like 15.10.1971 15:00 ---> 151019711500)
-# 
-def GetTimeToken():
-    now = datetime.now()
-    day = now.strftime("%d")
-    month = now.strftime("%m")
-    year = now.strftime("%Y")
-    hour = now.strftime("%H")
-    minute = now.strftime("%M")
-    date_time_string = day + month + year + hour + minute
-    return date_time_string
-
 
 ###########################################################################  
 # Check if detected change in PR is a new one or has been allready built
@@ -452,7 +472,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     print ("")
     pr=str(counter)
     myChangedfile.seek(0) # we need to read from start
-    print ("Changed PR numbers and change times from the DB file: "+BUILDCHANGEDPRSFILE)
+    print ("----- Changed PR numbers and change times from the DB file: "+BUILDCHANGEDPRSFILE+"----------")
     foundnewtime=0
     PRCount=0
     FilePRNumbers=[]
@@ -464,7 +484,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
        print (one_line)
        ContentOfFilePRNumber.append(one_line) # get runtime copy for possible changes
     PRCount=PRCount-1 # fictional first value
-    print ("Existing PRs with done change builds:"+str(PRCount))
+    print ("------- Existing PRs with done change builds:"+str(PRCount)+"----------------")
    
     myChangedfile.seek(0) 
     for one_line in myChangedfile:
@@ -484,20 +504,6 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
             else:
                 print ("Found new changed time for this PR")
                 foundnewtime=1
-            #for item in readChangetime:
-            #    print  ("Latest changetime found/build for this PR:"+item)
-            #    if (changetime==item):
-            #        print ("Changetime is same as in latest done build. No actions needed")
-            #        count=count-1
-            #    else:
-            #        print ("Internal: No match with current changetime list item...")
-                    
-                    
-             #   newChangetime=item
-            #if (count>0):
-            #    print ("New changetime found:"+str(newChangetime))
-            #    foundnewtime=foundnewtime+1
-         
                 
     if (pr in FilePRNumbers and foundnewtime==0):
          print ("No new PRs nor existing PRs with new changes found. No actions needed")
@@ -505,13 +511,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     elif (pr in FilePRNumbers and foundnewtime>0):
          print ("Existing PRs with new changes found")
          print ("Going to update changed PRs file!")
-         #tmpline=pr+","
-         #tmpline2=",".join(readChangetime)
-         #addline=tmpline+tmpline2+","+changetime
-         addline=pr+","+changetime
-         
-         print ("addline:"+addline)
-         #ContentOfFilePRNumber.append(addline)
+         addline=pr+","+changetime         
          matching_index = None 
          for index, item in enumerate(ContentOfFilePRNumber):
              if item.startswith(pr):
@@ -525,7 +525,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
          
          myChangedfile.close()
          myChangedfile = open(BUILDCHANGEDPRSFILE, "w") 
-         myChangedfile.seek(0)
+         #myChangedfile.seek(0)
          
          for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again. 
              print ("Writing line:"+line)
@@ -541,7 +541,6 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         print ("Going to update changed PRs file!")
         addline=pr+","+changetime
         ContentOfFilePRNumber.append(addline)
-        #myChangedfile.seek(0)
         myChangedfile.close()
         myChangedfile = open(BUILDCHANGEDPRSFILE, "w") 
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again. 
