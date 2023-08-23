@@ -192,13 +192,14 @@ def Finder():
         with urlopen(url) as response:
             body = response.read()        
         data = json.loads(body)
-
+        
+        print ("==> PR:"+url)
         for doneline in copy_done_prs:
             
                 #check duplicate PRs in db file
                 if (counter in processed_pr):
-                    print (processed_pr)
-                    print ("---> Duplicate PR found in db file: "+str(counter) +" skipping!")
+                    print ("Processed PRs:"+ str(processed_pr))
+                    print ("---> Duplicate PR found in db file: "+str(counter) +" skipping to next one!")
                     counter=counter+1
                     print ("--------------------------------------------------------------------------------------------------")  
                     break
@@ -248,7 +249,7 @@ def Finder():
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
                 
-                counter=counter+1
+    counter=counter+1
 
 
 #########################################################################################
