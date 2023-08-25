@@ -13,6 +13,9 @@
 import os,sys
 import json
 from collections import defaultdict
+import urllib.request
+from urllib.request import Request, urlopen
+
 import copy
 import time
 from datetime import datetime
@@ -46,6 +49,9 @@ RUNDELAY=1 # minutes to wait before next execution of this script
 # Use for example .sh file which exports them in shell when sourced
 
 #########################################################################################################
+
+
+myChangedfile=""
 
 def main(argv):
 
@@ -186,6 +192,9 @@ def Finder():
         data = json.loads(body)
 
         print ("==> PR:"+url)
+        print("==> CHECKING ---> SOURCE PR BRANCH:"+data["head"]["ref"])
+        #print(json.dumps(data, indent=4))
+
         for doneline in copy_done_prs:
 
                 #check duplicate PRs in db file
@@ -217,13 +226,20 @@ def Finder():
 
                         answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned,BUILDCHANGEDPRSFILE)
                         if (answer=="YES"):
+                            SOURCE=data["head"]["ref"]
+                            print("==> CHECKING ---> SOURCE PR BRANCH:"+data["head"]["ref"])
+
                             PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,changeTimeCleaned)
                         else:
                             print ("")
+                        counter=counter+1
+                        break
 
                     else:
                         print ("No PR changes, no actions needed")
                         processed_pr.append(counter)
+                        counter=counter+1
+                        break
                     print ("--------------------------------------------------------------------------------------------------")
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
                     print  ("==> NEW PR, going to build this:"+str(counter))
@@ -235,12 +251,16 @@ def Finder():
 
                     timetoken=""
                     PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
+                    counter=counter+1
+                    break
 
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
+                    counter=counter+1
+                    break
 
-    counter=counter+1
+        #counter=counter+1
 
 
 #########################################################################################
@@ -276,7 +296,7 @@ def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
                         print("==> SOURCE REPO:"+data["head"]["repo"]["html_url"])
                         SOURCE_REPO=data["head"]["repo"]["html_url"]
                     except KeyError:
-                        print("ERROR:no source repo info found")
+                        print("#ERROR:no source repo info found")
                         ErroCounter=ErroCounter+1
 
                     USER=data["user"]["login"]
@@ -508,15 +528,15 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
          else:
              print ("Internal: Can't change PR change time list")
 
-         myChangedfile.close()
+         #myChangedfile.close()
          myChangedfile = open(BUILDCHANGEDPRSFILE, "w")
          #myChangedfile.seek(0)
 
          for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
              print ("Writing line:"+line)
-             niceline=line
+             niceline=line+"\n"
              myChangedfile.write(niceline)
-             myChangedfile.close()
+             #myChangedfile.close()
              myChangedfile = open(BUILDCHANGEDPRSFILE, "a")
          return "YES"
 
@@ -526,12 +546,12 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         print ("Going to update changed PRs file!")
         addline=pr+","+changetime
         ContentOfFilePRNumber.append(addline)
-        myChangedfile.close()
+        #myChangedfile.close()
         myChangedfile = open(BUILDCHANGEDPRSFILE, "w")
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
-            niceline=line
+            niceline=line+"\n"
             myChangedfile.write(niceline)
-            myChangedfile.close()
+            #myChangedfile.close()
             myChangedfile = open(BUILDCHANGEDPRSFILE, "a")
         return "YES"
 
