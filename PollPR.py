@@ -137,7 +137,7 @@ def Finder():
     print ("------ All open PullRequest for repo: "+TESTREPO+" -------")
     for pull in pulls:
         print (pull)
-        #print (pull.number)
+        #print ("pull number:"+str(pull.number))
         open_prs.update({pull.number: "ON"})
         i=i+1
 
@@ -190,18 +190,19 @@ def Finder():
         with urlopen(url) as response:
             body = response.read()
         data = json.loads(body)
-
+        print ("###########################################################################################################################")
         print ("==> PR:"+url)
         print("==> CHECKING ---> SOURCE PR BRANCH:"+data["head"]["ref"])
         #print(json.dumps(data, indent=4))
-
+        #print("The real PR number from data:"+str(newPr))
+        counter=newPr # not anymore running counter, but the actual open PR numbers 
         for doneline in copy_done_prs:
 
                 #check duplicate PRs in db file
                 if (counter in processed_pr):
                     print ("Processed PRs:"+ str(processed_pr))
                     print ("---> Duplicate PR found in db file: "+str(counter) +" skipping to next one!")
-                    counter=counter+1
+                    #counter=counter+1
                     print ("--------------------------------------------------------------------------------------------------")
                     break
 
@@ -232,13 +233,13 @@ def Finder():
                             PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,changeTimeCleaned)
                         else:
                             print ("")
-                        counter=counter+1
+                        #counter=counter+1
                         break
 
                     else:
                         print ("No PR changes, no actions needed")
                         processed_pr.append(counter)
-                        counter=counter+1
+                        #counter=counter+1
                         break
                     print ("--------------------------------------------------------------------------------------------------")
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
@@ -251,15 +252,16 @@ def Finder():
 
                     timetoken=""
                     PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
-                    counter=counter+1
+                    #counter=counter+1
                     break
 
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
-                    counter=counter+1
+                    #counter=counter+1
                     break
 
+        #
         #counter=counter+1
 
 
@@ -389,9 +391,9 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION
     AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET+" --project "+PROJECT
     print ("")
-    print ("Hydra CLI APCOMMAND:"+APCOMMAND)
+    print ("Created Hydra CLI APCOMMAND:"+APCOMMAND)
     print ("")
-    print ("Hydra CLI AJCOMMAND:"+AJCOMMAND)
+    print ("Created Hydra CLI AJCOMMAND:"+AJCOMMAND)
     DONE=PR # write PR number to db file if both CMD exections are ok
     DONE=str(DONE)+"\r\n"
     #myfile.write(DONE)
