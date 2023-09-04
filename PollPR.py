@@ -10,7 +10,7 @@
 
 
 
-import os,sys
+import os,sys,argparse
 import json
 from collections import defaultdict
 import urllib.request
@@ -22,6 +22,7 @@ from datetime import datetime
 import subprocess
 import schedule
 from github import Github
+from aiohttp.web_routedef import options
 
 
 ###########################################################################################
@@ -45,9 +46,19 @@ SERVER="http://localhost:"+str(EXT_PORT) # Hydra build server to be commanded
 
 RUNDELAY=1 # minutes to wait before next execution of this script
 
+__version__ = u"0.73300"
+
 # HYDRACTL_USERNAME and HYDRACTL_PASSWORD environment variables (Hydra admin account) must be defined. DO NOT STORE TO PUBLIC GIHUB
 # Use for example .sh file which exports them in shell when sourced
 
+
+
+#Global commandline options
+
+DRYRUNMODE=""
+VERBOSEMODE=""
+SERVICEMODE=0
+CHERRYPICKEDPR=0
 #########################################################################################################
 
 
@@ -70,12 +81,56 @@ def main(argv):
 
     passu = os.getenv("HYDRACTL_PASSWORD")
     if passu == None:
-        print ("No Hydra admin account HYDRACTL_PASSWORD= env variable defined",file=sys.stderr)
+        print ("No Hydra admin account HYDRACTL_PASSWORD env variable defined",file=sys.stderr)
         print ("Exiting!!")
         sys.exit(3)
 
+parser = argparse.ArgumentParser(
+description="Github PullRequest Hydra builder activator",
 
-    if len(sys.argv) > 1:
+
+ epilog='''
+"See code for tool confguration options"
+''')
+
+parser.add_argument('-v', help='Check Github open PRs and activate Ghaf Hydra build', action='version',version="Version:{0}   mika.nokka1@gmail.com ,  MIT licenced ".format(__version__) )
+parser.add_argument("-d",help='Dry run mode',metavar="dry")
+parser.add_argument('-t', help='Verbose, talking, mode',metavar="verbose")
+parser.add_argument('-s', help='Service mode, runtime delays in secs',metavar="service",type=int, nargs=1)
+parser.add_argument('-p', help='Cherry pick PR number, ignore others',metavar="cherrypick",type=int,nargs=1)
+
+
+args = parser.parse_args()
+VERBOSEMODE = args.t or ''
+DRYRUNMODE= args.d or ''
+if (args.s):
+    SERVICEMODE=args.s[0] 
+if (args.p):
+    CHERRYPICKEDPR=args.p[0]
+
+
+if (VERBOSEMODE):
+    print("Verbose mode selected")
+elif(DRYRUNMODE):
+    print("Dryrun mode selected, no actions taked")
+elif(SERVICEMODE):
+    print ("Service mode selected with runtime delay: ", SERVICEMODE)
+elif (CHERRYPICKEDPR):
+    print ("Checking only PR:"+str(CHERRYPICKEDPR)," skpping other PRs")
+sys.exit(1)
+
+
+
+
+# quick old-school way to check needed parameters
+if (SLACKMESSAGE=='' or  SLACKCHANNEL==''):
+        print("\n---> MISSING ARGUMENTS!!\n ")
+        parser.print_help()
+        sys.exit(2)
+
+
+
+if len(sys.argv) > 1:
         argument = sys.argv[1]
         if (argument=="s"):
             print ("PR detector started, running every "+str(RUNDELAY)+" minutes")
@@ -93,7 +148,7 @@ def main(argv):
             print ("Unknown arg, use <s> for periodic running of this script")
             print("Running in default one-off mode")
             Finder()
-    else:
+else:
         print("Running in default one-off mode")
         Finder()
 
