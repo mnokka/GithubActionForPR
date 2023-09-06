@@ -83,10 +83,12 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     myChangedfile.seek(0)
     for one_line in myChangedfile:
        PRCount=PRCount+1
-       print (one_line)
+       if (VERBOSEMODE):
+           print (one_line)
        ContentOfFilePRNumber.append(one_line) # get runtime copy for possible changes
     PRCount=PRCount-1 # fictional first value
-    print ("------- Existing PRs with done change builds:"+str(PRCount)+"----------------")
+    if (VERBOSEMODE):
+        print ("------- Existing PRs with done change builds:"+str(PRCount)+"----------------")
 
     myChangedfile.seek(0)
     for one_line in myChangedfile:
@@ -110,7 +112,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
          print ("Existing PRs with new changes found")
          print ("Going to update changed PRs file!")
          addline=pr+","+changetime
-         matching_index = None
+         matchsing_index = None
          for index, item in enumerate(ContentOfFilePRNumber):
              if item.startswith(pr):
                  matching_index = index
@@ -128,7 +130,11 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
          for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
              print ("Writing line:"+line)
              niceline=line+"\n"
-             myChangedfile.write(niceline)
+             
+             if (DRYRUNMODE):
+                print("!!!Dryrun mode, not going to do actions!!!")
+             else:
+                myChangedfile.write(niceline)
              #myChangedfile.close()
              myChangedfile = open(BUILDCHANGEDPRSFILE, "a")
          return "YES"
@@ -143,7 +149,10 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         myChangedfile = open(BUILDCHANGEDPRSFILE, "w")
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
             niceline=line+"\n"
-            myChangedfile.write(niceline)
+            if (DRYRUNMODE):
+                print("!!!Dryrun mode, not going to do actions!!!")
+            else:
+                myChangedfile.write(niceline)
             #myChangedfile.close()
             myChangedfile = open(BUILDCHANGEDPRSFILE, "a")
         return "YES"
@@ -163,7 +172,8 @@ def CheckChangedPR(pr,repo,counter):
                     commits=pr.get_commits()
                     # Sort the commits by the commit timestamp in descending order
                     sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
-                    print ("Found commits:"+str(sorted_commits))
+                    if (VERBOSEMODE):
+                        print ("Found commits:"+str(sorted_commits))
                     # Get the timestamp of the most recent commit
                     CHANGED= sorted_commits[0].commit.committer.date
                     #CHANGED=pr.changed_at
@@ -180,6 +190,206 @@ def CheckChangedPR(pr,repo,counter):
                     else:
                         ("No changes for open PR detected")
                         return "NO",""
+
+#########################################################################################
+# If PR creator is in defined Github membership, initate Hydra build definition actions
+#
+def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
+
+                    # parse PR info (from Github JSON)
+                    SOURCE="NONE"
+                    TARGET="NONE"
+                    SOURCE_REPO="NONE"
+                    ErroCounter=0
+                    print ("")
+                    try:
+                        print("==> SOURCE PR BRANCH:"+data["head"]["ref"])
+                        SOURCE=data["head"]["ref"]
+                    except KeyError:
+                        print("ERROR: no head ref found")
+                        ErroCounter=ErroCounter+1
+
+                    try:
+                        print("==> TARGET BRANCH (like main/master):"+data["base"]["ref"])
+                        TARGET=data["base"]["ref"]
+                        if (TARGET=="main"):
+                            print("==> OK target(main) repo")
+                        else:
+                            print ("ERROR: source repo is not main")
+                            ErroCounter=ErroCounter+1
+                            #sys.exit(5)
+                    except KeyError:
+                        print("no base ref found")
+                    try:
+                        print("==> SOURCE REPO:"+data["head"]["repo"]["html_url"])
+                        SOURCE_REPO=data["head"]["repo"]["html_url"]
+                    except KeyError:
+                        print("#ERROR:no source repo info found")
+                        ErroCounter=ErroCounter+1
+
+                    USER=data["user"]["login"]
+                    org = g.get_organization(ORGANIZATION)
+                    user = g.get_user(USER)
+
+                    if (org.has_in_members(user) or USER=="mnokka"): # TBD remove test user backdoor
+                        print(f"---> The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
+                        if (counter in tbd_list):
+                            print ("------> Handling PR number:"+str(counter))
+                            if (ErroCounter==0):
+
+                                PRActions(SOURCE,counter,TARGET,myfile,USER,SOURCE_REPO,timetoken)
+
+                            else:
+                                print("Errors in PR data from Github, not doing build activities")
+                    else:
+                        print("The user: '{USER}' is not a member of the organization '{ORGANIZATION}'")
+                        print ("No build activities done")
+                    print ("--------------------------------------------------------------------------------------------------")
+
+
+##########################################################################################
+# Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
+# Record handled PR info to local db file
+#
+def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
+    OK_CMDEXE_COUNTER=0
+    print("")
+    print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
+
+    if (VERBOSEMODE):
+        print ("--> Target main branch:"+TARGET)
+        print ("--> Source branch:" +SOURCE)
+        print ("--> Source repo:"+SOURCE_REPO)
+        print ("--> PR number:"+str(PR))
+        print ("--> HYDRACTL command location used: "+HYDRACTL)
+        print ("--> Hydra port:"+str(EXT_PORT))
+        print ("--> Hydra server:"+SERVER)
+        print ("--> User:"+USER)
+        print ("--> Timetoken:"+timetoken)
+        print ("")
+    DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
+
+    if (len(timetoken) == 0):
+       PROJECT=USER+"X"+SOURCE
+    else:
+        PROJECT=USER+"X"+SOURCE+"X"+timetoken
+
+    #two phased convertings got this item usage working
+    PROJECT = PROJECT.encode('ascii',errors='ignore')
+    #Then convert it from bytes back to a string using:
+    PROJECT = PROJECT.decode()
+
+    FLAKE="git+"+SOURCE_REPO+"/?ref="+SOURCE
+    if (len(timetoken) == 0):
+        JOBSET=SOURCE+"X"+str(PR)
+    else:
+        JOBSET=SOURCE+"X"+str(PR)+"X"+timetoken
+
+    if (VERBOSEMODE):
+        print ("--> Hydra PROJECT:"+PROJECT)
+        print ("--> Hydra DESCRIPTION:"+DESCRIPTION)
+        print ("--> Hydra FLAKE:"+FLAKE)
+        print("--> Hydra JOBSET:"+JOBSET)
+    APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION
+    AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET+" --project "+PROJECT
+    if (VERBOSEMODE):
+        print ("")
+        print ("Created Hydra CLI APCOMMAND:"+APCOMMAND)
+        print ("")
+        print ("Created Hydra CLI AJCOMMAND:"+AJCOMMAND)
+    DONE=PR # write PR number to db file if both CMD exections are ok
+    DONE=str(DONE)+"\r\n"
+    #myfile.write(DONE)
+
+    # NOTE: As executing commands from Python file failed (Hydra jobset creation) and using same commands were ok from shell
+    # saving commands to file and executing the content from the read file
+    # this is temp solution for this POC only
+
+    cmdfile1 = open("cmdfile1", "w")
+    #cmdfile1.seek(0) # only if mode a used
+    cmdfile2 = open("cmdfile2", "w")
+    #cmdfile2.seek(0)
+    FIRSTLINE="#!/bin/bash"+"\r\n"
+
+    cmdfile1.write(FIRSTLINE)
+    cmdfile1.write(APCOMMAND)
+
+    cmdfile2.write(FIRSTLINE)
+    cmdfile2.write(AJCOMMAND)
+
+    cmdfile1.close()
+    cmdfile2.close()
+
+    cmd1=open("cmdfile1","r")
+    APline1=cmd1.read()
+    rc,out,err=ExeCMD(APline1)
+    if (rc != 0):
+        print("Command execution error:"+str(rc))
+        print ("Error message:"+str(err))
+    else:
+        print("OK command execution")
+        OK_CMDEXE_COUNTER +=1
+
+    time.sleep(2)
+    cmd2=open("cmdfile2","r")
+    AJline2=cmd2.read()
+    rc,out,err=ExeCMD(AJline2)
+    if (rc != 0):
+        print("Command execution error:"+str(rc))
+        print ("Error message:"+str(err))
+    else:
+        print("OK command execution")
+        OK_CMDEXE_COUNTER +=1
+
+    if (OK_CMDEXE_COUNTER == 2):
+        if (len(timetoken) == 0):
+            print ("2 correct CMD executions,NEW build, going to record PR:"+str(PR)+" as done deed")
+            if (DRYRUNMODE):
+                print("!!!Dryrun mode, not going to do actions!!!")
+            else:
+                myfile.write(DONE)
+        else:
+            print ("2 correct CMD executions, CHANGED PR build, going to record PR:"+str(PR)+" with CHANGE time:"+timetoken+" to own db file")
+    else:
+        print ("-------------------------------------------------------------------------------")
+        print ("ERROR ===> CMD executions errors found, NOT marking PR:"+str(PR)+" as done")
+        print ("-------------------------------------------------------------------------------")
+
+    #clean temp commandfiles
+    os.remove("./cmdfile1")
+    os.remove("./cmdfile2")
+    time.sleep(2)
+
+    print ("*******************************************************************************************************")
+
+
+##############################################################
+#  Execute given command string and return system feedback
+#
+def ExeCMD(commandLine):
+
+
+
+    print ("------------------------------------------------------------------------------------------")
+    print("Executing command:"+commandLine)
+    print ("------------------------------------------------------------------------------------------")
+
+    if (DRYRUNMODE):
+        print ("!!! Dryrun mode, not doing actions !!!")
+        return (42,"dryrun mode","dryrun mode")
+
+    else: 
+        sp = subprocess.Popen(commandLine,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        rc=sp.wait()
+        out,err=sp.communicate()
+
+        return rc,out,err
+
+
+
 
 
 
@@ -257,7 +467,8 @@ def Finder():
     myfile.seek(0) # a+ adds fd to end of file, for appends, we need to read from start
     print ("------Built PR numbers from the DB file: "+BUILDPRSFILE+" ------")
     for one_pr_number in myfile:
-        print (str(one_pr_number),end='')
+        if (VERBOSEMODE):
+            print (str(one_pr_number),end='')
         done_prs[int(one_pr_number)]="DONE"
 
     print("------ Checking which open PRs are new and require building ------")
@@ -308,7 +519,8 @@ def Finder():
 
                         changeTimeCleaned = str(changetime).replace(" ", "-") # hydra doesnt like spaces in arguments, nor :
                         changeTimeCleaned=changeTimeCleaned.replace(":","-")
-                        print ("Cleaned (book keeping) timetoken:"+changeTimeCleaned)
+                        if (VERBOSEMODE):
+                            print ("Cleaned (book keeping) timetoken:"+changeTimeCleaned)
 
                         answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned,BUILDCHANGEDPRSFILE)
                         if (answer=="YES"):
@@ -402,7 +614,7 @@ if (args.p):
 if (VERBOSEMODE):
     print("Verbose mode selected")
 elif(DRYRUNMODE):
-    print("Dryrun mode selected, no actions taked")
+    print("!!! Dryrun mode selected, no actions taken !!!")
 elif(SERVICEMODE):
     print ("Service mode selected with runtime delay: ", SERVICEMODE)
 elif (CHERRYPICKEDPR):
@@ -433,187 +645,10 @@ else:
 
 
 
-#########################################################################################
-# If PR creator is in defined Github membership, initate Hydra build definition actions
-#
-def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
-
-                    # parse PR info (from Github JSON)
-                    SOURCE="NONE"
-                    TARGET="NONE"
-                    SOURCE_REPO="NONE"
-                    ErroCounter=0
-                    print ("")
-                    try:
-                        print("==> SOURCE PR BRANCH:"+data["head"]["ref"])
-                        SOURCE=data["head"]["ref"]
-                    except KeyError:
-                        print("ERROR: no head ref found")
-                        ErroCounter=ErroCounter+1
-
-                    try:
-                        print("==> TARGET BRANCH (like main/master):"+data["base"]["ref"])
-                        TARGET=data["base"]["ref"]
-                        if (TARGET=="main"):
-                            print("==> OK target(main) repo")
-                        else:
-                            print ("ERROR: source repo is not main")
-                            ErroCounter=ErroCounter+1
-                            #sys.exit(5)
-                    except KeyError:
-                        print("no base ref found")
-                    try:
-                        print("==> SOURCE REPO:"+data["head"]["repo"]["html_url"])
-                        SOURCE_REPO=data["head"]["repo"]["html_url"]
-                    except KeyError:
-                        print("#ERROR:no source repo info found")
-                        ErroCounter=ErroCounter+1
-
-                    USER=data["user"]["login"]
-                    org = g.get_organization(ORGANIZATION)
-                    user = g.get_user(USER)
-
-                    if (org.has_in_members(user) or USER=="mnokka"): # TBD remove test user backdoor
-                        print(f"---> The user '{USER}' is a member of the organization '{ORGANIZATION}'.")
-                        if (counter in tbd_list):
-                            print ("------> Handling PR number:"+str(counter))
-                            if (ErroCounter==0):
-
-                                PRActions(SOURCE,counter,TARGET,myfile,USER,SOURCE_REPO,timetoken)
-
-                            else:
-                                print("Errors in PR data from Github, not doing build activities")
-                    else:
-                        print("The user: '{USER}' is not a member of the organization '{ORGANIZATION}'")
-                        print ("No build activities done")
-                    print ("--------------------------------------------------------------------------------------------------")
 
 
-##########################################################################################
-# Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
-# Record handled PR info to local db file
-#
-def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
-    OK_CMDEXE_COUNTER=0
-    print("")
-    print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
-    print ("--> Target main branch:"+TARGET)
-    print ("--> Source branch:" +SOURCE)
-    print ("--> Source repo:"+SOURCE_REPO)
-    print ("--> PR number:"+str(PR))
-    print ("--> HYDRACTL command location used: "+HYDRACTL)
-    print ("--> Hydra port:"+str(EXT_PORT))
-    print ("--> Hydra server:"+SERVER)
-    print ("--> User:"+USER)
-    print ("--> Timetoken:"+timetoken)
-    print ("")
-    DESCRIPTION="\"PR:"+str(PR)+" User:"+USER+" Repo:"+SOURCE_REPO+" Branch:"+SOURCE+"\""
 
-    if (len(timetoken) == 0):
-       PROJECT=USER+"X"+SOURCE
-    else:
-        PROJECT=USER+"X"+SOURCE+"X"+timetoken
 
-    #two phased convertings got this item usage working
-    PROJECT = PROJECT.encode('ascii',errors='ignore')
-    #Then convert it from bytes back to a string using:
-    PROJECT = PROJECT.decode()
-
-    FLAKE="git+"+SOURCE_REPO+"/?ref="+SOURCE
-    if (len(timetoken) == 0):
-        JOBSET=SOURCE+"X"+str(PR)
-    else:
-        JOBSET=SOURCE+"X"+str(PR)+"X"+timetoken
-
-    print ("--> Hydra PROJECT:"+PROJECT)
-    print ("--> Hydra DESCRIPTION:"+DESCRIPTION)
-    print ("--> Hydra FLAKE:"+FLAKE)
-    print("--> Hydra JOBSET:"+JOBSET)
-    APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION
-    AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET+" --project "+PROJECT
-    print ("")
-    print ("Created Hydra CLI APCOMMAND:"+APCOMMAND)
-    print ("")
-    print ("Created Hydra CLI AJCOMMAND:"+AJCOMMAND)
-    DONE=PR # write PR number to db file if both CMD exections are ok
-    DONE=str(DONE)+"\r\n"
-    #myfile.write(DONE)
-
-    # NOTE: As executing commands from Python file failed (Hydra jobset creation) and using same commands were ok from shell
-    # saving commands to file and executing the content from the read file
-    # this is temp solution for this POC only
-
-    cmdfile1 = open("cmdfile1", "w")
-    #cmdfile1.seek(0) # only if mode a used
-    cmdfile2 = open("cmdfile2", "w")
-    #cmdfile2.seek(0)
-    FIRSTLINE="#!/bin/bash"+"\r\n"
-
-    cmdfile1.write(FIRSTLINE)
-    cmdfile1.write(APCOMMAND)
-
-    cmdfile2.write(FIRSTLINE)
-    cmdfile2.write(AJCOMMAND)
-
-    cmdfile1.close()
-    cmdfile2.close()
-
-    cmd1=open("cmdfile1","r")
-    APline1=cmd1.read()
-    rc,out,err=ExeCMD(APline1)
-    if (rc != 0):
-        print("Command execution error:"+str(rc))
-        print ("Error message:"+str(err))
-    else:
-        print("OK command execution")
-        OK_CMDEXE_COUNTER +=1
-
-    time.sleep(2)
-    cmd2=open("cmdfile2","r")
-    AJline2=cmd2.read()
-    rc,out,err=ExeCMD(AJline2)
-    if (rc != 0):
-        print("Command execution error:"+str(rc))
-        print ("Error message:"+str(err))
-    else:
-        print("OK command execution")
-        OK_CMDEXE_COUNTER +=1
-
-    if (OK_CMDEXE_COUNTER == 2):
-        if (len(timetoken) == 0):
-            print ("2 correct CMD executions,NEW build, going to record PR:"+str(PR)+" as done deed")
-            myfile.write(DONE)
-        else:
-            print ("2 correct CMD executions, CHANGED PR build, going to record PR:"+str(PR)+" with CHANGE time:"+timetoken+" to own db file")
-    else:
-        print ("-------------------------------------------------------------------------------")
-        print ("ERROR ===> CMD executions errors found, NOT marking PR:"+str(PR)+" as done")
-        print ("-------------------------------------------------------------------------------")
-
-    #clean temp commandfiles
-    os.remove("./cmdfile1")
-    os.remove("./cmdfile2")
-    time.sleep(2)
-
-    print ("*******************************************************************************************************")
-
-##############################################################
-#  Execute given command string and return system feedback
-#
-def ExeCMD(commandLine):
-
-    print ("------------------------------------------------------------------------------------------")
-    print("Executing command:"+commandLine)
-    print ("------------------------------------------------------------------------------------------")
-
-    sp = subprocess.Popen(commandLine,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE)
-    rc=sp.wait()
-    out,err=sp.communicate()
-
-    return rc,out,err
 
 
 #
