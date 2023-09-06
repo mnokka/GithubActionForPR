@@ -1,12 +1,11 @@
 # Aiming to be used with Hydra (Nixos) builder for Ghaf project https://github.com/tiiuae/ghaf
 
 # Activate Hydra to build new Pull Requests when created (for the main repo under observations)
-# Rebuild still open (and previously built) PR if there has been cnew hanges for that PR
+# Rebuild still open (and previously built) PR if there has been new hanges for that PR
 # Uses Ghaf build tools from https://github.com/tiiuae/ci-public
 
 # Author mika.nokka1@gmail.com 13.6.2023
 
-# USAGE: PollPr.py for one off checking run,   PollPr.pr <s> to start sceduled running of the tool
 
 
 
@@ -55,10 +54,10 @@ __version__ = u"0.73300"
 
 #Global commandline options
 
-DRYRUNMODE=""
-VERBOSEMODE=""
-SERVICEMODE=0
-CHERRYPICKEDPR=0
+DRYRUNMODE=None
+VERBOSEMODE=None
+SERVICEMODE=None
+CHERRYPICKEDPR=None
 #########################################################################################################
 
 
@@ -83,11 +82,12 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     myChangedfile.seek(0)
     for one_line in myChangedfile:
        PRCount=PRCount+1
-       if (VERBOSEMODE):
+       
+       if (VERBOSEMODE is not None):
            print (one_line)
        ContentOfFilePRNumber.append(one_line) # get runtime copy for possible changes
     PRCount=PRCount-1 # fictional first value
-    if (VERBOSEMODE):
+    if (VERBOSEMODE is not None):
         print ("------- Existing PRs with done change builds:"+str(PRCount)+"----------------")
 
     myChangedfile.seek(0)
@@ -131,7 +131,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
              print ("Writing line:"+line)
              niceline=line+"\n"
              
-             if (DRYRUNMODE):
+             if (DRYRUNMODE is not None):
                 print("!!!Dryrun mode, not going to do actions!!!")
              else:
                 myChangedfile.write(niceline)
@@ -149,7 +149,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         myChangedfile = open(BUILDCHANGEDPRSFILE, "w")
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
             niceline=line+"\n"
-            if (DRYRUNMODE):
+            if (DRYRUNMODE is not None):
                 print("!!!Dryrun mode, not going to do actions!!!")
             else:
                 myChangedfile.write(niceline)
@@ -172,7 +172,7 @@ def CheckChangedPR(pr,repo,counter):
                     commits=pr.get_commits()
                     # Sort the commits by the commit timestamp in descending order
                     sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
-                    if (VERBOSEMODE):
+                    if (VERBOSEMODE is not None):
                         print ("Found commits:"+str(sorted_commits))
                     # Get the timestamp of the most recent commit
                     CHANGED= sorted_commits[0].commit.committer.date
@@ -256,7 +256,7 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     print("")
     print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
 
-    if (VERBOSEMODE):
+    if (VERBOSEMODE is not None):
         print ("--> Target main branch:"+TARGET)
         print ("--> Source branch:" +SOURCE)
         print ("--> Source repo:"+SOURCE_REPO)
@@ -285,14 +285,14 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     else:
         JOBSET=SOURCE+"X"+str(PR)+"X"+timetoken
 
-    if (VERBOSEMODE):
+    if (VERBOSEMODE is not None):
         print ("--> Hydra PROJECT:"+PROJECT)
         print ("--> Hydra DESCRIPTION:"+DESCRIPTION)
         print ("--> Hydra FLAKE:"+FLAKE)
         print("--> Hydra JOBSET:"+JOBSET)
     APCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AP --project "+PROJECT+" --display "+DESCRIPTION
     AJCOMMAND="python3 "+HYDRACTL+" "+SERVER+" AJ --description "+DESCRIPTION+" --check 300 --type flake --flake "+FLAKE+" -s enabled --jobset "+JOBSET+" --project "+PROJECT
-    if (VERBOSEMODE):
+    if (VERBOSEMODE is not None):
         print ("")
         print ("Created Hydra CLI APCOMMAND:"+APCOMMAND)
         print ("")
@@ -344,7 +344,7 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     if (OK_CMDEXE_COUNTER == 2):
         if (len(timetoken) == 0):
             print ("2 correct CMD executions,NEW build, going to record PR:"+str(PR)+" as done deed")
-            if (DRYRUNMODE):
+            if (DRYRUNMODE is not None):
                 print("!!!Dryrun mode, not going to do actions!!!")
             else:
                 myfile.write(DONE)
@@ -369,12 +369,11 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
 def ExeCMD(commandLine):
 
 
-
     print ("------------------------------------------------------------------------------------------")
     print("Executing command:"+commandLine)
     print ("------------------------------------------------------------------------------------------")
 
-    if (DRYRUNMODE):
+    if (DRYRUNMODE is not None):
         print ("!!! Dryrun mode, not doing actions !!!")
         return (42,"dryrun mode","dryrun mode")
 
@@ -400,7 +399,6 @@ def Finder():
 
 
     print ("------------------------------------------------------------------------------------------")
-
 
     #########################################################################
     #Authorization to Github
@@ -467,7 +465,7 @@ def Finder():
     myfile.seek(0) # a+ adds fd to end of file, for appends, we need to read from start
     print ("------Built PR numbers from the DB file: "+BUILDPRSFILE+" ------")
     for one_pr_number in myfile:
-        if (VERBOSEMODE):
+        if (VERBOSEMODE is not None):
             print (str(one_pr_number),end='')
         done_prs[int(one_pr_number)]="DONE"
 
@@ -488,9 +486,20 @@ def Finder():
         data = json.loads(body)
         print ("###########################################################################################################################")
         print ("==> PR:"+url)
+
+        if (CHERRYPICKEDPR is not None):
+            if (CHERRYPICKEDPR==newPr):
+                print("===> To be cherry picked PR found:"+str(newPr))
+            else: 
+                print ("Skipping this one, trying to cherry pick PR:"+str(CHERRYPICKEDPR))
+                continue
+
+
+
         print("==> CHECKING ---> SOURCE PR BRANCH:"+data["head"]["ref"])
         #print(json.dumps(data, indent=4))
         #print("The real PR number from data:"+str(newPr))
+
         counter=newPr # not anymore running counter, but the actual open PR numbers 
         for doneline in copy_done_prs:
 
@@ -519,7 +528,7 @@ def Finder():
 
                         changeTimeCleaned = str(changetime).replace(" ", "-") # hydra doesnt like spaces in arguments, nor :
                         changeTimeCleaned=changeTimeCleaned.replace(":","-")
-                        if (VERBOSEMODE):
+                        if (VERBOSEMODE is not None):
                             print ("Cleaned (book keeping) timetoken:"+changeTimeCleaned)
 
                         answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned,BUILDCHANGEDPRSFILE)
@@ -565,8 +574,13 @@ def Finder():
 
 
 
-
+###################################################################################################################################
 def main(argv):
+
+    global CHERRYPICKEDPR
+    global VERBOSEMODE 
+    global DRYRUNMODE
+    global SERVICEMODE
 
     current_time = datetime.now()
     formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -575,84 +589,84 @@ def main(argv):
     print ("----------------------------------------------------------------------------------------")
 
 
+
+
+    parser = argparse.ArgumentParser(
+    description="Github PullRequest Hydra builder activator",
+
+
+     epilog='''
+    "See code for tool confguration options"
+    ''')
+
+    parser.add_argument('-v', help='Check Github open PRs and activate Ghaf Hydra build', action='version',version="Version:{0}   mika.nokka1@gmail.com ,  MIT licenced ".format(__version__) )
+    parser.add_argument("-d",help='Dry run mode',metavar="dry")
+    parser.add_argument('-t', help='Verbose, talking, mode',metavar="verbose")
+    parser.add_argument('-s', help='Service mode, runtime delays in secs',metavar="service",type=int, nargs=1)
+    parser.add_argument('-p', help='Cherry pick PR number, ignore others',metavar="cherrypick",type=int,nargs=1)
+
+
+    args = parser.parse_args()
+
+    VERBOSEMODE = args.t or None
+    DRYRUNMODE= args.d or None
+    SERVICEMODE= args.s or None
+
+    #= args.p or ''
+    if (args.s):
+        SERVICEMODE=args.s[0] 
+    if (args.p):
+        CHERRYPICKEDPR=args.p[0]
+
+
+    if (VERBOSEMODE is not None):
+        print("Verbose mode selected")
+    if (DRYRUNMODE is not None):
+        print("!!! Dryrun mode selected, no actions taken !!!")
+    if(SERVICEMODE):
+        print ("Service mode selected with runtime delay: ", SERVICEMODE)
+    if (CHERRYPICKEDPR is not None):
+        print ("Checking only PR:"+str(CHERRYPICKEDPR)," skpping other PRs")
+
+
     username = os.getenv("HYDRACTL_USERNAME")
-    if username == None:
+    if (username == None and DRYRUNMODE == None):
         print ("No Hydra admin account HYDRACTL_USERNAME env variable defined",file=sys.stderr)
         print ("Exiting!!")
         sys.exit(3)
 
     passu = os.getenv("HYDRACTL_PASSWORD")
-    if passu == None:
+    if (passu == None and DRYRUNMODE == None):
         print ("No Hydra admin account HYDRACTL_PASSWORD env variable defined",file=sys.stderr)
         print ("Exiting!!")
         sys.exit(3)
 
-parser = argparse.ArgumentParser(
-description="Github PullRequest Hydra builder activator",
+
+    print ("Build PRs db file:"+BUILDPRSFILE)
+    print ("Build and rebuild PRs due changes db file: "+BUILDCHANGEDPRSFILE)
+    print ("Observing Github repo (main) PRs:"+TESTREPO)
+    print ("Organization participation required for PR building:"+ORGANIZATION)
+    print ("Using Hydra build server:"+SERVER)
+    print ("Assuming Hydra CLI command to be:"+HYDRACTL)
+    print ("Only PRs to main branch are processed")
 
 
- epilog='''
-"See code for tool confguration options"
-''')
-
-parser.add_argument('-v', help='Check Github open PRs and activate Ghaf Hydra build', action='version',version="Version:{0}   mika.nokka1@gmail.com ,  MIT licenced ".format(__version__) )
-parser.add_argument("-d",help='Dry run mode',metavar="dry")
-parser.add_argument('-t', help='Verbose, talking, mode',metavar="verbose")
-parser.add_argument('-s', help='Service mode, runtime delays in secs',metavar="service",type=int, nargs=1)
-parser.add_argument('-p', help='Cherry pick PR number, ignore others',metavar="cherrypick",type=int,nargs=1)
-
-
-args = parser.parse_args()
-VERBOSEMODE = args.t or ''
-DRYRUNMODE= args.d or ''
-if (args.s):
-    SERVICEMODE=args.s[0] 
-if (args.p):
-    CHERRYPICKEDPR=args.p[0]
-
-
-if (VERBOSEMODE):
-    print("Verbose mode selected")
-elif(DRYRUNMODE):
-    print("!!! Dryrun mode selected, no actions taken !!!")
-elif(SERVICEMODE):
-    print ("Service mode selected with runtime delay: ", SERVICEMODE)
-elif (CHERRYPICKEDPR):
-    print ("Checking only PR:"+str(CHERRYPICKEDPR)," skpping other PRs")
-
-
-
-print ("Build PRs db file:"+BUILDPRSFILE)
-print ("Build and rebuild PRs due changes db file: "+BUILDCHANGEDPRSFILE)
-print ("Observing Github repo (main) PRs:"+TESTREPO)
-print ("Organization participation required for PR building:"+ORGANIZATION)
-print ("Using Hydra build server:"+SERVER)
-print ("Assuming Hydra CLI command to be:"+HYDRACTL)
-print ("Only PRs to main branch are processed")
-
-
-if (SERVICEMODE):
-    print ("Service mode starting!")
-    schedule.every(RUNDELAY).minutes.do(Finder)
-    while True:
-            schedule.run_pending()
-            time.sleep(SERVICEMODE)
-else: 
-    print ("Running command just once")
-    Finder()
+    if (SERVICEMODE):
+        print ("Service mode starting!")
+        schedule.every(RUNDELAY).minutes.do(Finder)
+        while True:
+                schedule.run_pending()
+                time.sleep(SERVICEMODE)
+    else: 
+        print ("Running command just once")
+        Finder()
 
 
 
 
-
-
-
-
-
-
-
-#
 #######################################################
+#Entry point
+
 if __name__ == "__main__":
     main(sys.argv[1:])
 
