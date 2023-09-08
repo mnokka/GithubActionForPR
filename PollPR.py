@@ -1,15 +1,26 @@
+"""
 # Aiming to be used with Hydra (Nixos) builder for Ghaf project https://github.com/tiiuae/ghaf
 
-# Activate Hydra to build new Pull Requests when created (for the main repo under observations)
-# Rebuild still open (and previously built) PR if there has been new hanges for that PR
+# Activates Hydra (Ghaf docker based Hydra build system implementation) to build new open Pull Requests (for the main repo under observations)
+# Rebuilds still open (and previously built) PR if there has been new changes for that PR
 # Uses Ghaf build tools from https://github.com/tiiuae/ci-public
 
+# Can be used in service mode (polling frequently changes) or cherrypicking some wished open PR 
+# Keeps internal recoed which open PRs or changed PRs have been allready processed (given Hydra build commands)
+#
+#
+#
 # Author mika.nokka1@gmail.com 13.6.2023
+"""
+
+# pragma pylint: disable=bad-indentation,superfluous-parens,line-too-long,global-statement,too-many-arguments,consider-using-with,no-else-break,no-else-return,unspecified-encoding,unused-import,too-many-locals,too-many-branches,too-many-statements,unused-argument,no-member,unsubscriptable-object,pointless-statement
 
 
 
 
-import os,sys,argparse
+import os
+import sys
+import argparse
 import json
 from collections import defaultdict
 import urllib.request
@@ -22,6 +33,9 @@ import subprocess
 import schedule
 from github import Github
 from aiohttp.web_routedef import options
+
+
+
 
 
 ###########################################################################################
@@ -45,7 +59,7 @@ SERVER="http://localhost:"+str(EXT_PORT) # Hydra build server to be commanded
 
 RUNDELAY=1 # minutes to wait before next execution of this script
 
-__version__ = u"0.73300"
+__version__ ="0.73300"
 
 # HYDRACTL_USERNAME and HYDRACTL_PASSWORD environment variables (Hydra admin account) must be defined. DO NOT STORE TO PUBLIC GIHUB
 # Use for example .sh file which exports them in shell when sourced
@@ -61,15 +75,18 @@ CHERRYPICKEDPR=None
 #########################################################################################################
 
 
-myChangedfile=""
+
 
 
 
 ##########################################################################
-# Check if detected change in PR is a new one or has been allready built
-# In case a new one, update database file (also if new change for open PR is detected)
-#
-def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
+def GetChangePRData(pr,counter,myChangedfile,changetime):
+    """
+    Check if detected change in PR is a new one or has been allready built
+    In case a new one, update database file (also if new change for open PR is detected)
+    """
+
+    myChangedfile=""
     print ("")
     pr=str(counter)
     myChangedfile.seek(0) # we need to read from start
@@ -82,7 +99,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
     myChangedfile.seek(0)
     for one_line in myChangedfile:
        PRCount=PRCount+1
-       
+
        if (VERBOSEMODE is not None):
            print (one_line)
        ContentOfFilePRNumber.append(one_line) # get runtime copy for possible changes
@@ -92,7 +109,6 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
 
     myChangedfile.seek(0)
     for one_line in myChangedfile:
-        #print ("Changed PR line:"+one_line)
         values = one_line.strip().split(",")
         readPR=values[0]
         readChangetime=values[1:]
@@ -112,7 +128,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
          print ("Existing PRs with new changes found")
          print ("Going to update changed PRs file!")
          addline=pr+","+changetime
-         matchsing_index = None
+
          for index, item in enumerate(ContentOfFilePRNumber):
              if item.startswith(pr):
                  matching_index = index
@@ -122,20 +138,20 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
              ContentOfFilePRNumber[matching_index]=addline
          else:
              print ("Internal: Can't change PR change time list")
+             return "ERROR"
 
-         #myChangedfile.close()
          myChangedfile = open(BUILDCHANGEDPRSFILE, "w")
-         #myChangedfile.seek(0)
+
 
          for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
              print ("Writing line:"+line)
              niceline=line+"\n"
-             
+
              if (DRYRUNMODE is not None):
                 print("!!!Dryrun mode, not going to do actions!!!")
              else:
                 myChangedfile.write(niceline)
-             #myChangedfile.close()
+
              myChangedfile = open(BUILDCHANGEDPRSFILE, "a")
          return "YES"
 
@@ -145,7 +161,7 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
         print ("Going to update changed PRs file!")
         addline=pr+","+changetime
         ContentOfFilePRNumber.append(addline)
-        #myChangedfile.close()
+
         myChangedfile = open(BUILDCHANGEDPRSFILE, "w")
         for line in ContentOfFilePRNumber: # write whole "changed PRs build" file again.
             niceline=line+"\n"
@@ -153,48 +169,49 @@ def GetChangePRData(pr,counter,myChangedfile,changetime,BUILDCHANGEDPRSFILE):
                 print("!!!Dryrun mode, not going to do actions!!!")
             else:
                 myChangedfile.write(niceline)
-            #myChangedfile.close()
+
             myChangedfile = open(BUILDCHANGEDPRSFILE, "a")
         return "YES"
 
+    return "DONE"
 
 
 
 
 #########################################################################################
-# Check if PR (still open) has been changed since creation time
-#
 def CheckChangedPR(pr,repo,counter):
+                """
+                Check if PR (still open) has been changed since creation time
+                """
+                print("Checking PR:",pr)
+                pr=repo.get_pull(counter)
+                CREATED=pr.created_at
+                commits=pr.get_commits()
+                # Sort the commits by the commit timestamp in descending order
+                sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
+                if (VERBOSEMODE is not None):
+                    print ("Found commits:"+str(sorted_commits))
+                # Get the timestamp of the most recent commit
+                CHANGED= sorted_commits[0].commit.committer.date
 
-                    print("Checking PR:",pr)
-                    pr=repo.get_pull(counter)
-                    CREATED=pr.created_at
-                    commits=pr.get_commits()
-                    # Sort the commits by the commit timestamp in descending order
-                    sorted_commits = sorted(commits, key=lambda c: c.commit.committer.date, reverse=True)
-                    if (VERBOSEMODE is not None):
-                        print ("Found commits:"+str(sorted_commits))
-                    # Get the timestamp of the most recent commit
-                    CHANGED= sorted_commits[0].commit.committer.date
-                    #CHANGED=pr.changed_at
-                    print ("CREATED:"+str(CREATED))
-                    print ("CHANGED:"+str(CHANGED))
+                print ("CREATED:"+str(CREATED))
+                print ("CHANGED:"+str(CHANGED))
 
-                    #date_format = "%Y-%m-%d %H:%M:%S"
-                    time_diff_mins = (CHANGED - CREATED).total_seconds() / 60
-                    print ("Time difference in minutes:",time_diff_mins)
+                time_diff_mins = (CHANGED - CREATED).total_seconds() / 60
+                print ("Time difference in minutes:",time_diff_mins)
 
-                    if (time_diff_mins > 10):
-                        print ("Possible change in open PR detected, may require rebuilding")
-                        return "YES",CHANGED
-                    else:
-                        ("No changes for open PR detected")
-                        return "NO",""
+                if (time_diff_mins > 10):
+                    print ("Possible change in open PR detected, may require rebuilding")
+                    return "YES",CHANGED
+                else:
+                    print("No changes for open PR detected")
+                    return "NO",""
 
 #########################################################################################
-# If PR creator is in defined Github membership, initate Hydra build definition actions
-#
 def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
+                    """
+                    If PR creator is in defined Github membership, initate Hydra build definition actions
+                    """
 
                     # parse PR info (from Github JSON)
                     SOURCE="NONE"
@@ -217,7 +234,6 @@ def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
                         else:
                             print ("ERROR: source repo is not main")
                             ErroCounter=ErroCounter+1
-                            #sys.exit(5)
                     except KeyError:
                         print("no base ref found")
                     try:
@@ -248,10 +264,12 @@ def PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken):
 
 
 ##########################################################################################
-# Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
-# Record handled PR info to local db file
-#
 def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
+    """
+    Construct Hydra build command from PullRequests data (Using Ghaf inhouse CLI command)
+    Record handled PR info to local db file
+    """
+
     OK_CMDEXE_COUNTER=0
     print("")
     print("Construct Hydra(for project tiiuae/ghaf) build job set for branch:"+SOURCE )
@@ -299,7 +317,6 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
         print ("Created Hydra CLI AJCOMMAND:"+AJCOMMAND)
     DONE=PR # write PR number to db file if both CMD exections are ok
     DONE=str(DONE)+"\r\n"
-    #myfile.write(DONE)
 
     # NOTE: As executing commands from Python file failed (Hydra jobset creation) and using same commands were ok from shell
     # saving commands to file and executing the content from the read file
@@ -322,7 +339,8 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
 
     cmd1=open("cmdfile1","r")
     APline1=cmd1.read()
-    rc,out,err=ExeCMD(APline1)
+    rc,_out,err=ExeCMD(APline1)
+
     if (rc != 0):
         print("Command execution error:"+str(rc))
         print ("Error message:"+str(err))
@@ -333,7 +351,7 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
     time.sleep(2)
     cmd2=open("cmdfile2","r")
     AJline2=cmd2.read()
-    rc,out,err=ExeCMD(AJline2)
+    rc,_out,err=ExeCMD(AJline2)
     if (rc != 0):
         print("Command execution error:"+str(rc))
         print ("Error message:"+str(err))
@@ -364,10 +382,10 @@ def PRActions(SOURCE,PR,TARGET,myfile,USER,SOURCE_REPO,timetoken):
 
 
 ##############################################################
-#  Execute given command string and return system feedback
-#
 def ExeCMD(commandLine):
-
+    """
+    Execute given command string and return system feedback
+    """
 
     print ("------------------------------------------------------------------------------------------")
     print("Executing command:"+commandLine)
@@ -377,7 +395,7 @@ def ExeCMD(commandLine):
         print ("!!! Dryrun mode, not doing actions !!!")
         return (42,"dryrun mode","dryrun mode")
 
-    else: 
+    else:
         sp = subprocess.Popen(commandLine,
             shell=True,
             stdout=subprocess.PIPE,
@@ -393,10 +411,10 @@ def ExeCMD(commandLine):
 
 
 ##########################################################################################
-# Check if any new (not built) pull requests exists in defined repo (fro main branch
-#
 def Finder():
-
+    """
+    Check if any new (not built) pull requests exists in defined repo (fro main branch
+    """
 
     print ("------------------------------------------------------------------------------------------")
 
@@ -414,7 +432,7 @@ def Finder():
         print("No Github tokenfile found, check:"+TOKENFILE)
         sys.exit(5)
 
-    if githubtoken == None:
+    if githubtoken is None:
         print ("No Github token defined, check:"+TOKENFILE,file=sys.stderr)
         sys.exit(5)
 
@@ -430,7 +448,6 @@ def Finder():
     print ("------ All open PullRequest for repo: "+TESTREPO+" -------")
     for pull in pulls:
         print (pull)
-        #print ("pull number:"+str(pull.number))
         open_prs.update({pull.number: "ON"})
         i=i+1
 
@@ -490,24 +507,22 @@ def Finder():
         if (CHERRYPICKEDPR is not None):
             if (CHERRYPICKEDPR==newPr):
                 print("===> To be cherry picked PR found:"+str(newPr))
-            else: 
+            else:
                 print ("Skipping this one, trying to cherry pick PR:"+str(CHERRYPICKEDPR))
                 continue
 
 
 
         print("==> CHECKING ---> SOURCE PR BRANCH:"+data["head"]["ref"])
-        #print(json.dumps(data, indent=4))
-        #print("The real PR number from data:"+str(newPr))
 
-        counter=newPr # not anymore running counter, but the actual open PR numbers 
-        for doneline in copy_done_prs:
+
+        counter=newPr # not anymore running counter, but the actual open PR numbers
+        for _doneline in copy_done_prs:
 
                 #check duplicate PRs in db file
                 if (counter in processed_pr):
                     print ("Processed PRs:"+ str(processed_pr))
                     print ("---> Duplicate PR found in db file: "+str(counter) +" skipping to next one!")
-                    #counter=counter+1
                     print ("--------------------------------------------------------------------------------------------------")
                     break
 
@@ -531,21 +546,19 @@ def Finder():
                         if (VERBOSEMODE is not None):
                             print ("Cleaned (book keeping) timetoken:"+changeTimeCleaned)
 
-                        answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned,BUILDCHANGEDPRSFILE)
+                        answer=GetChangePRData(pr,counter,myChangedfile,changeTimeCleaned)
                         if (answer=="YES"):
-                            SOURCE=data["head"]["ref"]
+                            #SOURCE=data["head"]["ref"]
                             print("==> CHECKING ---> SOURCE PR BRANCH:"+data["head"]["ref"])
 
                             PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,changeTimeCleaned)
                         else:
                             print ("")
-                        #counter=counter+1
                         break
 
                     else:
                         print ("No PR changes, no actions needed")
                         processed_pr.append(counter)
-                        #counter=counter+1
                         break
                     print ("--------------------------------------------------------------------------------------------------")
                 elif (open_prs[counter]=="ON" and done_prs[counter]=="NONE"):
@@ -558,17 +571,12 @@ def Finder():
 
                     timetoken=""
                     PRBuilding(data,ErroCounter,g,counter,myfile,tbd_list,timetoken)
-                    #counter=counter+1
                     break
 
                 elif (open_prs[counter]=="OFF" and done_prs[counter]=="DONE"):
                     print  ("==> OLD done PR:"+str(counter))
                     processed_pr.append[counter]
-                    #counter=counter+1
                     break
-
-        #
-        #counter=counter+1
 
 
 
@@ -576,9 +584,11 @@ def Finder():
 
 ###################################################################################################################################
 def main(argv):
+    """ Main. Check parameters
+    """
 
     global CHERRYPICKEDPR
-    global VERBOSEMODE 
+    global VERBOSEMODE
     global DRYRUNMODE
     global SERVICEMODE
 
@@ -599,7 +609,7 @@ def main(argv):
     "See code for tool confguration options"
     ''')
 
-    parser.add_argument('-v', help='Check Github open PRs and activate Ghaf Hydra build', action='version',version="Version:{0}   mika.nokka1@gmail.com ,  MIT licenced ".format(__version__) )
+    parser.add_argument('-v', help='Check Github open PRs and activate Ghaf Hydra build', action='version',version=f"Version:{__version__}   mika.nokka1@gmail.com ,  MIT licenced ")
     parser.add_argument("-d",help='Dry run mode',metavar="dry")
     parser.add_argument('-t', help='Verbose, talking, mode',metavar="verbose")
     parser.add_argument('-s', help='Service mode, runtime delays in secs',metavar="service",type=int, nargs=1)
@@ -612,9 +622,8 @@ def main(argv):
     DRYRUNMODE= args.d or None
     SERVICEMODE= args.s or None
 
-    #= args.p or ''
     if (args.s):
-        SERVICEMODE=args.s[0] 
+        SERVICEMODE=args.s[0]
     if (args.p):
         CHERRYPICKEDPR=args.p[0]
 
@@ -630,13 +639,13 @@ def main(argv):
 
 
     username = os.getenv("HYDRACTL_USERNAME")
-    if (username == None and DRYRUNMODE == None):
+    if (username is None and DRYRUNMODE is None):
         print ("No Hydra admin account HYDRACTL_USERNAME env variable defined",file=sys.stderr)
         print ("Exiting!!")
         sys.exit(3)
 
     passu = os.getenv("HYDRACTL_PASSWORD")
-    if (passu == None and DRYRUNMODE == None):
+    if (passu is None and DRYRUNMODE is None):
         print ("No Hydra admin account HYDRACTL_PASSWORD env variable defined",file=sys.stderr)
         print ("Exiting!!")
         sys.exit(3)
@@ -657,7 +666,7 @@ def main(argv):
         while True:
                 schedule.run_pending()
                 time.sleep(SERVICEMODE)
-    else: 
+    else:
         print ("Running command just once")
         Finder()
 
@@ -669,4 +678,4 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-
+    
